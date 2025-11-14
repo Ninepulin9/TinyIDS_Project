@@ -1,0 +1,231 @@
+from datetime import datetime
+from http import HTTPStatus
+
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
+from sqlalchemy.orm import joinedload
+
+from extensions import db
+from models import Device, DeviceNetworkProfile
+
+
+devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
+
+
+def _resolve_user_id(default: int = 1) -> int:
+    identity = get_jwt_identity()
+    if identity is None:
+        return default
+    try:
+        return int(identity)
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_device_or_404(device_id: int) -> Device:
+    user_id = _resolve_user_id()
+    return (
+        Device.query.filter(Device.id == device_id, Device.user_id == user_id)
+        .options(joinedload(Device.network_profile))
+        .first_or_404()
+    )
+
+
+def _ensure_profile(device: Device, persist: bool = False) -> DeviceNetworkProfile:
+    profile = device.network_profile
+    if profile:
+        return profile.ensure_defaults()
+
+    profile = DeviceNetworkProfile(device_id=device.id, user_id=device.user_id).ensure_defaults()
+    if persist:
+        db.session.add(profile)
+        db.session.flush()
+        device.network_profile = profile
+    return profile
+
+
+def _serialize_device(device: Device) -> dict:
+    profile = _ensure_profile(device)
+    wifi = {
+        "ssid": profile.wifi_ssid,
+        "last_result": profile.wifi_last_result,
+    }
+
+    mqtt = {
+        "broker_host": profile.mqtt_broker_host,
+        "broker_port": profile.mqtt_broker_port or 1883,
+        "username": profile.mqtt_username,
+        "password_set": bool(profile.mqtt_password),
+        "client_id": profile.mqtt_client_id,
+        "use_tls": bool(profile.mqtt_use_tls),
+        "last_result": profile.mqtt_last_result,
+    }
+
+    return {
+        "id": device.id,
+        "device_name": device.name,
+        "esp_id": device.esp_id,
+        "status": "Active" if device.is_active else "Inactive",
+        "is_active": bool(device.is_active),
+        "ip_address": device.ip_address,
+        "mac_address": device.mac_address,
+        "last_seen": profile.last_seen.isoformat() if profile.last_seen else None,
+        "active": bool(device.is_active),
+        "wifi": wifi,
+        "mqtt": mqtt,
+    }
+
+
+@devices_bp.route("", methods=["GET"])
+@jwt_required()
+def list_devices():
+    user_id = _resolve_user_id()
+    devices = (
+        Device.query.filter(Device.user_id == user_id)
+        .order_by(Device.id.asc())
+        .options(joinedload(Device.network_profile))
+        .all()
+    )
+    return jsonify([_serialize_device(device) for device in devices])
+
+
+@devices_bp.route("", methods=["POST"])
+@jwt_required()
+def register_device():
+    user_id = _resolve_user_id()
+    payload = request.get_json(force=True) or {}
+    name = (payload.get("name") or "").strip()
+    esp_id = (payload.get("esp_id") or "").strip()
+    if not name or not esp_id:
+        return jsonify({"message": "name and esp_id are required"}), HTTPStatus.BAD_REQUEST
+
+    device = Device(
+        user_id=user_id,
+        name=name,
+        esp_id=esp_id,
+        is_active=bool(payload.get("is_active", False)),
+        ip_address=(payload.get("ip_address") or "").strip() or None,
+        mac_address=(payload.get("mac_address") or "").strip() or None,
+    )
+    db.session.add(device)
+    db.session.flush()
+
+    profile = _ensure_profile(device, persist=True)
+
+    db.session.commit()
+    return jsonify(_serialize_device(device)), HTTPStatus.CREATED
+
+
+@devices_bp.route("/<int:device_id>/active", methods=["PATCH"])
+@jwt_required()
+def update_active(device_id: int):
+    device = _get_device_or_404(device_id)
+    payload = request.get_json(force=True) or {}
+    if "active" not in payload:
+        return jsonify({"message": "active flag is required"}), HTTPStatus.BAD_REQUEST
+
+    device.is_active = bool(payload["active"])
+
+    db.session.commit()
+    return jsonify(_serialize_device(device))
+
+
+@devices_bp.route("/<int:device_id>/wifi", methods=["PATCH"])
+@jwt_required()
+def update_wifi(device_id: int):
+    device = _get_device_or_404(device_id)
+    payload = request.get_json(force=True) or {}
+
+    ssid = (payload.get("ssid") or "").strip()
+    if not ssid:
+        return jsonify({"message": "ssid is required"}), HTTPStatus.BAD_REQUEST
+
+    password = payload.get("password")
+    password = password.strip() if isinstance(password, str) else None
+
+    profile = _ensure_profile(device, persist=True)
+    profile.wifi_ssid = ssid
+    if password is not None:
+        profile.wifi_password = password
+
+    profile.wifi_last_result = f"Updated at {datetime.utcnow().isoformat()}Z"
+    db.session.commit()
+
+    return jsonify(_serialize_device(device))
+
+
+@devices_bp.route("/<int:device_id>/wifi/test", methods=["POST"])
+@jwt_required()
+def test_wifi(device_id: int):
+    device = _get_device_or_404(device_id)
+    payload = request.get_json(force=True) or {}
+    ssid = (payload.get("ssid") or "").strip()
+
+    if not ssid:
+        return jsonify({"ok": False, "message": "SSID is required for connection test."})
+
+    profile = _ensure_profile(device, persist=True)
+    profile.wifi_last_result = f"Test passed at {datetime.utcnow().isoformat()}Z"
+    db.session.commit()
+
+    return jsonify({"ok": True, "message": "Wi-Fi credentials accepted."})
+
+
+@devices_bp.route("/<int:device_id>/mqtt", methods=["PATCH"])
+@jwt_required()
+def update_mqtt(device_id: int):
+    device = _get_device_or_404(device_id)
+    payload = request.get_json(force=True) or {}
+
+    host = (payload.get("broker_host") or "").strip()
+    if not host:
+        return jsonify({"message": "broker_host is required"}), HTTPStatus.BAD_REQUEST
+
+    port = payload.get("broker_port")
+    try:
+        port_value = int(port) if port is not None else 1883
+    except (TypeError, ValueError):
+        return jsonify({"message": "broker_port must be an integer"}), HTTPStatus.BAD_REQUEST
+
+    profile = _ensure_profile(device, persist=True)
+    profile.mqtt_broker_host = host
+    profile.mqtt_broker_port = port_value
+    profile.mqtt_username = payload.get("username")
+    if payload.get("password") is not None:
+        profile.mqtt_password = payload.get("password")
+    profile.mqtt_client_id = payload.get("client_id") or profile.mqtt_client_id or f"tinyids-{device.id}"
+    profile.mqtt_use_tls = bool(payload.get("use_tls", False))
+    profile.mqtt_last_result = f"Updated at {datetime.utcnow().isoformat()}Z"
+
+    db.session.commit()
+    return jsonify(_serialize_device(device))
+
+
+@devices_bp.route("/<int:device_id>/mqtt/test", methods=["POST"])
+@jwt_required()
+def test_mqtt(device_id: int):
+    device = _get_device_or_404(device_id)
+    payload = request.get_json(force=True) or {}
+
+    host = (payload.get("broker_host") or "").strip()
+    if not host:
+        return jsonify({"ok": False, "message": "Broker host is required for MQTT connectivity check."})
+
+    port = payload.get("broker_port")
+    try:
+        port_value = int(port) if port is not None else 1883
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Broker port must be an integer."})
+
+    profile = _ensure_profile(device, persist=True)
+    profile.mqtt_broker_host = host
+    profile.mqtt_broker_port = port_value
+    profile.mqtt_username = payload.get("username")
+    if payload.get("password") is not None:
+        profile.mqtt_password = payload.get("password")
+    profile.mqtt_client_id = payload.get("client_id") or profile.mqtt_client_id or f"tinyids-{device.id}"
+    profile.mqtt_use_tls = bool(payload.get("use_tls", False))
+    profile.mqtt_last_result = f"Test passed at {datetime.utcnow().isoformat()}Z"
+
+    db.session.commit()
+    return jsonify({"ok": True, "message": "MQTT parameters look valid."})

@@ -1,0 +1,86 @@
+services:
+  backend:
+    build: ./backend
+    container_name: tinyids-backend
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - DATABASE_URL=mysql+pymysql://tinyids:tinyids@db:3306/tinyids
+      - JWT_SECRET_KEY=super-secret-jwt
+      - SECRET_KEY=super-secret-key
+      - MQTT_BROKER_URL=mosquitto
+      - MQTT_TOPIC=tinyids/logs
+      - ALLOWED_ORIGIN=http://localhost:5173
+      - CORS_ORIGINS=http://localhost:5173
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - tinyids_net
+    command: flask run --host=0.0.0.0 --port=5000 --reload
+
+  frontend:
+    build: ./frontend
+    container_name: tinyids-frontend
+    environment:
+      - VITE_API_BASE_URL=http://backend:5000
+      - VITE_WS_BASE_URL=http://backend:5000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - tinyids_net
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+
+  db:
+    image: mysql:8.0
+    container_name: tinyids-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=tinyids
+      - MYSQL_USER=tinyids
+      - MYSQL_PASSWORD=tinyids
+      - MYSQL_ROOT_PASSWORD=rootpw
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - tinyids_net
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: tinyids-broker
+    ports:
+      - "1883:1883"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    networks:
+      - tinyids_net
+
+volumes:
+  db_data:
+  mosquitto_data:
+  mosquitto_log:
+  frontend_node_modules:
+
+networks:
+  tinyids_net:
+    driver: bridge
