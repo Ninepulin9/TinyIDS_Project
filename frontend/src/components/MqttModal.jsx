@@ -3,6 +3,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
+import { X } from 'lucide-react'
 
 import api from '../lib/api'
 import Button from './ui/Button.jsx'
@@ -30,7 +31,7 @@ const mqttSchema = z.object({
 
 const makeClientId = (deviceId) => `tinyids-${deviceId}-${Math.random().toString(36).slice(2, 7)}`
 
-const MqttModal = ({ device, open, onClose, onSaved }) => {
+const MqttModal = ({ device, open, onClose, onSaved, isDemo = false }) => {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testOutcome, setTestOutcome] = useState(null)
@@ -87,6 +88,25 @@ const MqttModal = ({ device, open, onClose, onSaved }) => {
     setTestOutcome(null)
     const payload = buildPayload(values)
 
+    if (isDemo) {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      toast.success('MQTT configuration updated')
+      onSaved?.({
+        ...device,
+        mqtt: {
+          ...(device.mqtt ?? {}),
+          broker_host: payload.broker_host,
+          broker_port: payload.broker_port,
+          username: payload.username,
+          client_id: payload.client_id,
+          use_tls: payload.use_tls,
+        },
+      })
+      setSaving(false)
+      onClose?.()
+      return
+    }
+
     try {
       const { data } = await api.patch(`/api/devices/${device.id}/mqtt`, payload)
       toast.success('MQTT configuration updated')
@@ -118,6 +138,12 @@ const MqttModal = ({ device, open, onClose, onSaved }) => {
   })
 
   const handleTest = async () => {
+    if (isDemo) {
+      setTestOutcome({ ok: true, message: 'Demo device — MQTT test skipped.' })
+      toast.success('Demo device — MQTT test skipped.')
+      return
+    }
+
     const values = getValues()
     const payload = buildPayload(values)
     setTesting(true)
@@ -140,14 +166,27 @@ const MqttModal = ({ device, open, onClose, onSaved }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-6">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
-        <header>
-          <h2 className="text-2xl font-semibold text-slate-900">MQTT Configuration</h2>
-          <p className="text-sm text-slate-500">Configure MQTT connectivity for {device.device_name}.</p>
-        </header>
+    <div className="fixed inset-0 z-50 flex">
+      <div className="hidden flex-1 bg-slate-900/40 backdrop-blur-sm sm:block" onClick={onClose} />
+      <div className="ml-auto flex h-full w-full max-w-xl flex-col bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-400">MQTT Editor</p>
+            <h2 className="text-lg font-semibold text-slate-900">{device.device_name}</h2>
+            <p className="text-xs text-slate-500">Configure MQTT connectivity.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close MQTT editor"
+            disabled={saving || testing}
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
-        <form className="mt-5 space-y-4" onSubmit={submitHandler}>
+        <form className="flex-1 space-y-4 overflow-y-auto px-6 py-6" onSubmit={submitHandler}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label htmlFor="mqtt-broker-host" className="text-sm font-medium text-slate-700">

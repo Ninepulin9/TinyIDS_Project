@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
+import { X } from 'lucide-react'
 
 import api from '../lib/api'
 import Button from './ui/Button.jsx'
@@ -21,7 +22,7 @@ const wifiSchema = z
     message: 'Password must be at least 8 characters when provided',
   })
 
-const WifiModal = ({ device, open, onClose, onSaved }) => {
+const WifiModal = ({ device, open, onClose, onSaved, isDemo = false }) => {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testOutcome, setTestOutcome] = useState(null)
@@ -62,6 +63,18 @@ const WifiModal = ({ device, open, onClose, onSaved }) => {
       password: values.password?.trim() ?? '',
     }
 
+    if (isDemo) {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      toast.success('Wi-Fi configuration updated (demo)')
+      onSaved?.({
+        ...device,
+        wifi: { ...(device.wifi ?? {}), ssid: payload.ssid },
+      })
+      setSaving(false)
+      onClose?.()
+      return
+    }
+
     try {
       const { data } = await api.patch(`/api/devices/${device.id}/wifi`, payload)
       toast.success('Wi-Fi configuration updated')
@@ -86,6 +99,12 @@ const WifiModal = ({ device, open, onClose, onSaved }) => {
   })
 
   const handleTest = async () => {
+    if (isDemo) {
+      setTestOutcome({ ok: true, message: 'Demo device — Wi-Fi test skipped.' })
+      toast.success('Demo device — Wi-Fi test skipped.')
+      return
+    }
+
     const values = getValues()
     const payload = {
       ssid: values.ssid?.trim() ?? '',
@@ -112,14 +131,26 @@ const WifiModal = ({ device, open, onClose, onSaved }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-6">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <header>
-          <h2 className="text-2xl font-semibold text-slate-900">Wi-Fi Configuration</h2>
-          <p className="text-sm text-slate-500">Update network credentials for {device.device_name}.</p>
-        </header>
-
-        <form className="mt-5 space-y-4" onSubmit={submitHandler}>
+    <div className="fixed inset-0 z-50 flex">
+      <div className="hidden flex-1 bg-slate-900/40 backdrop-blur-sm sm:block" onClick={onClose} />
+      <div className="ml-auto flex h-full w-full max-w-md flex-col bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-400">Wi-Fi Editor</p>
+            <h2 className="text-lg font-semibold text-slate-900">{device.device_name}</h2>
+            <p className="text-xs text-slate-500">Update network credentials.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close Wi-Fi editor"
+            disabled={saving || testing}
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <form className="flex-1 space-y-4 overflow-y-auto px-6 py-6" onSubmit={submitHandler}>
           <div>
             <label htmlFor="wifi-ssid" className="text-sm font-medium text-slate-700">
               SSID

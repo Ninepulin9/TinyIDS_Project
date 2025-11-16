@@ -42,6 +42,8 @@ const sampleDevices = [
   },
 ]
 
+const isDemoDevice = (device) => String(device?.id ?? '').startsWith('demo-')
+
 const ESPConfigPage = () => {
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -106,6 +108,12 @@ const ESPConfigPage = () => {
     setTogglingId(device.id)
 
     setDevices((prev) => prev.map((item) => (item.id === device.id ? { ...item, active: nextActive } : item)))
+
+    if (isDemoDevice(device)) {
+      toast.success(`${device.device_name} ${nextActive ? 'activated' : 'deactivated'} (demo mode)`)
+      setTogglingId(null)
+      return
+    }
 
     try {
       const { data } = await api.patch(`/api/devices/${device.id}/active`, { active: nextActive })
@@ -175,6 +183,7 @@ const ESPConfigPage = () => {
         open={Boolean(selectedWifiDevice)}
         onClose={() => setSelectedWifiDevice(null)}
         onSaved={handleWifiSaved}
+        isDemo={isDemoDevice(selectedWifiDevice)}
       />
 
       <MqttModal
@@ -182,6 +191,7 @@ const ESPConfigPage = () => {
         open={Boolean(selectedMqttDevice)}
         onClose={() => setSelectedMqttDevice(null)}
         onSaved={handleMqttSaved}
+        isDemo={isDemoDevice(selectedMqttDevice)}
       />
     </div>
   )
