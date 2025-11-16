@@ -43,7 +43,7 @@ const DeviceTable = ({
     <>
       {headerContent}
       <div className={tableWrapperClass}>
-        <table className="min-w-[820px] divide-y divide-slate-100 text-sm">
+        <table className="w-full divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Device Name</th>
