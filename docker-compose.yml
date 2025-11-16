@@ -11,8 +11,8 @@ services:
       - SECRET_KEY=super-secret-key
       - MQTT_BROKER_URL=mosquitto
       - MQTT_TOPIC=tinyids/logs
-      - ALLOWED_ORIGIN=http://localhost:5173
-      - CORS_ORIGINS=http://localhost:5173
+      - ALLOWED_ORIGIN=*
+      - CORS_ORIGINS=*
     ports:
       - "5000:5000"
     volumes:

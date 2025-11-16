@@ -106,7 +106,7 @@ const Register = () => {
         localStorage.setItem('tinyids_token', data.access_token)
       }
 
-      setModal({ open: true, type: 'success', message: 'Account created successfully! Redirecting...' })
+      setModal({ open: true, type: 'success', message: 'Account created successfully!' })
       setTimeout(() => {
         setModal((prev) => ({ ...prev, open: false }))
         navigate('/login')

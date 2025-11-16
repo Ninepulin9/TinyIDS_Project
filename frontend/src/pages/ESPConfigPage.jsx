@@ -6,6 +6,42 @@ import DeviceTable from '../components/DeviceTable.jsx'
 import WifiModal from '../components/WifiModal.jsx'
 import MqttModal from '../components/MqttModal.jsx'
 
+const sampleDevices = [
+  {
+    id: 'demo-1',
+    device_name: 'Lab Sensor A',
+    status: 'Connected',
+    last_seen: '2025-11-10T09:12:00Z',
+    ip_address: '192.168.10.21',
+    mac_address: 'AA:BB:CC:DD:EE:01',
+    active: true,
+    wifi: { ssid: 'TinyIDS-Lab' },
+    mqtt: { broker: 'demo-broker', topic: 'tinyids/demo/lab' },
+  },
+  {
+    id: 'demo-2',
+    device_name: 'Warehouse ESP-7',
+    status: 'Disconnected',
+    last_seen: '2025-11-09T20:45:00Z',
+    ip_address: '10.0.30.15',
+    mac_address: 'AA:BB:CC:DD:EE:02',
+    active: false,
+    wifi: { ssid: 'TinyIDS-Warehouse' },
+    mqtt: { broker: 'demo-broker', topic: 'tinyids/demo/warehouse' },
+  },
+  {
+    id: 'demo-3',
+    device_name: 'Perimeter Node 3',
+    status: 'Connected',
+    last_seen: '2025-11-10T08:30:00Z',
+    ip_address: '172.16.0.45',
+    mac_address: 'AA:BB:CC:DD:EE:03',
+    active: true,
+    wifi: { ssid: 'TinyIDS-Perimeter' },
+    mqtt: { broker: 'demo-broker', topic: 'tinyids/demo/perimeter' },
+  },
+]
+
 const ESPConfigPage = () => {
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -21,13 +57,21 @@ const ESPConfigPage = () => {
     setError('')
     try {
       const { data } = await api.get('/api/devices')
-      setDevices(Array.isArray(data) ? data : [])
+      const fetchedDevices = Array.isArray(data) ? data : []
+      if (!fetchedDevices.length) {
+        setDevices(sampleDevices)
+      } else {
+        setDevices(fetchedDevices)
+      }
     } catch (err) {
       const message =
         err?.response?.data?.message ??
         err?.message ??
-        'Unable to load devices right now. Please try again later.'
-      setError(message)
+        'Unable to load devices right now. Showing demo data instead.'
+      console.error('Unable to load devices', err)
+      setDevices(sampleDevices)
+      setError('')
+      toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -110,18 +154,21 @@ const ESPConfigPage = () => {
         </div>
       </header>
 
-      <DeviceTable
-        devices={filteredDevices}
-        loading={loading}
-        error={error}
-        onRetry={fetchDevices}
-        query={query}
-        onQueryChange={setQuery}
-        onEditWifi={setSelectedWifiDevice}
-        onEditMqtt={setSelectedMqttDevice}
-        onToggleActive={handleToggleActive}
-        togglingId={togglingId}
-      />
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md">
+        <DeviceTable
+          devices={filteredDevices}
+          loading={loading}
+          error={error}
+          onRetry={fetchDevices}
+          query={query}
+          onQueryChange={setQuery}
+          onEditWifi={setSelectedWifiDevice}
+          onEditMqtt={setSelectedMqttDevice}
+          onToggleActive={handleToggleActive}
+          togglingId={togglingId}
+          withContainer={false}
+        />
+      </section>
 
       <WifiModal
         device={selectedWifiDevice}

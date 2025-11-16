@@ -32,8 +32,10 @@ def create_app() -> Flask:
     if isinstance(cors_origins, str):
         cors_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
     cors_origin_list: List[str] = list(cors_origins or [allowed_origin])
+    allow_all_origins = any(origin == "*" for origin in cors_origin_list)
+    cors_resource_origins = "*" if allow_all_origins else cors_origin_list
 
-    cors_resources = {r"/api/*": {"origins": "http://localhost:5173"}}
+    cors_resources = {r"/api/*": {"origins": cors_resource_origins}}
     CORS(
         app,
         resources=cors_resources,
@@ -47,7 +49,7 @@ def create_app() -> Flask:
     jwt.init_app(app)
     socketio.init_app(
         app,
-        cors_allowed_origins=cors_origin_list or allowed_origin,
+        cors_allowed_origins="*" if allow_all_origins else (cors_origin_list or allowed_origin),
         message_queue=app.config.get("SOCKETIO_MESSAGE_QUEUE"),
     )
 
