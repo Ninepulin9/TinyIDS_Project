@@ -113,7 +113,7 @@ const Register = () => {
       }, 1200)
     } catch (registrationError) {
       const message =
-        registrationError?.response?.data?.message ?? 'Registration failed. Please try again or contact support.'
+        registrationError?.response?.data?.message ?? 'Registration failed. Please try again.'
       setError(message)
       setModal({ open: true, type: 'error', message })
     } finally {
