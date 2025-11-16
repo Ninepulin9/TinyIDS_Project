@@ -139,8 +139,8 @@ const MqttModal = ({ device, open, onClose, onSaved, isDemo = false }) => {
 
   const handleTest = async () => {
     if (isDemo) {
-      setTestOutcome({ ok: true, message: 'Demo device — MQTT test skipped.' })
-      toast.success('Demo device — MQTT test skipped.')
+      setTestOutcome({ ok: true, message: 'MQTT test simulated.' })
+      toast.success('MQTT test simulated.')
       return
     }
 

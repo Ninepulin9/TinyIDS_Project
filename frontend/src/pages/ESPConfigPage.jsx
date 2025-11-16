@@ -8,7 +8,7 @@ import MqttModal from '../components/MqttModal.jsx'
 
 const sampleDevices = [
   {
-    id: 'demo-1',
+    id: 'sample-1',
     device_name: 'Lab Sensor A',
     status: 'Connected',
     last_seen: '2025-11-10T09:12:00Z',
@@ -16,10 +16,10 @@ const sampleDevices = [
     mac_address: 'AA:BB:CC:DD:EE:01',
     active: true,
     wifi: { ssid: 'TinyIDS-Lab' },
-    mqtt: { broker: 'demo-broker', topic: 'tinyids/demo/lab' },
+    mqtt: { broker: 'lab-broker', topic: 'tinyids/sample/lab' },
   },
   {
-    id: 'demo-2',
+    id: 'sample-2',
     device_name: 'Warehouse ESP-7',
     status: 'Disconnected',
     last_seen: '2025-11-09T20:45:00Z',
@@ -27,10 +27,10 @@ const sampleDevices = [
     mac_address: 'AA:BB:CC:DD:EE:02',
     active: false,
     wifi: { ssid: 'TinyIDS-Warehouse' },
-    mqtt: { broker: 'demo-broker', topic: 'tinyids/demo/warehouse' },
+    mqtt: { broker: 'warehouse-broker', topic: 'tinyids/sample/warehouse' },
   },
   {
-    id: 'demo-3',
+    id: 'sample-3',
     device_name: 'Perimeter Node 3',
     status: 'Connected',
     last_seen: '2025-11-10T08:30:00Z',
@@ -38,11 +38,11 @@ const sampleDevices = [
     mac_address: 'AA:BB:CC:DD:EE:03',
     active: true,
     wifi: { ssid: 'TinyIDS-Perimeter' },
-    mqtt: { broker: 'demo-broker', topic: 'tinyids/demo/perimeter' },
+    mqtt: { broker: 'perimeter-broker', topic: 'tinyids/sample/perimeter' },
   },
 ]
 
-const isDemoDevice = (device) => String(device?.id ?? '').startsWith('demo-')
+const isSampleDevice = (device) => String(device?.id ?? '').startsWith('sample-')
 
 const ESPConfigPage = () => {
   const [devices, setDevices] = useState([])
@@ -69,7 +69,7 @@ const ESPConfigPage = () => {
       const message =
         err?.response?.data?.message ??
         err?.message ??
-        'Unable to load devices right now. Showing demo data instead.'
+        'Unable to load devices right now. Showing sample data instead.'
       console.error('Unable to load devices', err)
       setDevices(sampleDevices)
       setError('')
@@ -109,8 +109,8 @@ const ESPConfigPage = () => {
 
     setDevices((prev) => prev.map((item) => (item.id === device.id ? { ...item, active: nextActive } : item)))
 
-    if (isDemoDevice(device)) {
-      toast.success(`${device.device_name} ${nextActive ? 'activated' : 'deactivated'} (demo mode)`)
+    if (isSampleDevice(device)) {
+      toast.success(`${device.device_name} ${nextActive ? 'activated' : 'deactivated'}`)
       setTogglingId(null)
       return
     }
@@ -183,7 +183,7 @@ const ESPConfigPage = () => {
         open={Boolean(selectedWifiDevice)}
         onClose={() => setSelectedWifiDevice(null)}
         onSaved={handleWifiSaved}
-        isDemo={isDemoDevice(selectedWifiDevice)}
+        isDemo={isSampleDevice(selectedWifiDevice)}
       />
 
       <MqttModal
@@ -191,7 +191,7 @@ const ESPConfigPage = () => {
         open={Boolean(selectedMqttDevice)}
         onClose={() => setSelectedMqttDevice(null)}
         onSaved={handleMqttSaved}
-        isDemo={isDemoDevice(selectedMqttDevice)}
+        isDemo={isSampleDevice(selectedMqttDevice)}
       />
     </div>
   )

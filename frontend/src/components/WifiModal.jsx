@@ -65,7 +65,7 @@ const WifiModal = ({ device, open, onClose, onSaved, isDemo = false }) => {
 
     if (isDemo) {
       await new Promise((resolve) => setTimeout(resolve, 300))
-      toast.success('Wi-Fi configuration updated (demo)')
+      toast.success('Wi-Fi configuration updated')
       onSaved?.({
         ...device,
         wifi: { ...(device.wifi ?? {}), ssid: payload.ssid },
@@ -100,8 +100,8 @@ const WifiModal = ({ device, open, onClose, onSaved, isDemo = false }) => {
 
   const handleTest = async () => {
     if (isDemo) {
-      setTestOutcome({ ok: true, message: 'Demo device — Wi-Fi test skipped.' })
-      toast.success('Demo device — Wi-Fi test skipped.')
+      setTestOutcome({ ok: true, message: 'Wi-Fi test simulated.' })
+      toast.success('Wi-Fi test simulated.')
       return
     }
 
