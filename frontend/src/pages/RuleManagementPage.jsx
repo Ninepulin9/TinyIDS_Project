@@ -57,6 +57,35 @@ const sampleRules = {
   },
 }
 
+const ActiveToggle = ({ value = false, onToggle, disabled = false }) => {
+  const handleClick = () => {
+    if (disabled) return
+    onToggle?.(!value)
+  }
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      aria-label="Toggle rule activation"
+      onClick={handleClick}
+      disabled={disabled}
+      className={`relative inline-flex h-8 w-16 items-center rounded-full border-2 transition-colors duration-200 ${
+        value
+          ? 'border-emerald-500 bg-emerald-500 shadow-[0_4px_12px_rgba(16,185,129,0.45)]'
+          : 'border-slate-200 bg-slate-200'
+      } ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`ml-1 inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-200 ${
+          value ? 'translate-x-7' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
+}
+
 const RuleManagementPage = () => {
   const [devices, setDevices] = useState([])
   const [loadingDevices, setLoadingDevices] = useState(true)
@@ -68,26 +97,68 @@ const RuleManagementPage = () => {
   const [ruleErrors, setRuleErrors] = useState({})
   const [loadingRules, setLoadingRules] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [ruleStates, setRuleStates] = useState({})
+  const [ruleStatesLoading, setRuleStatesLoading] = useState(false)
+  const [togglingRuleId, setTogglingRuleId] = useState(null)
+
+  const mapRuleStates = (entries) =>
+    setRuleStates((prev) => {
+      const next = { ...prev }
+      entries.forEach(([id, rule]) => {
+        if (id != null && rule) {
+          next[id] = rule
+        }
+      })
+      return next
+    })
+
+  const loadRuleStates = useCallback(
+    async (deviceList) => {
+      if (!deviceList?.length) return
+      setRuleStatesLoading(true)
+      try {
+        const entries = await Promise.all(
+          deviceList.map(async (device) => {
+            if (!device?.id) return null
+
+            const sampleRule = sampleRules[device.id] ?? sampleRules.fallback
+
+            try {
+              const { data } = await api.get(`/api/device-rules/${device.id}`)
+              return [device.id, { ...data, _sample: false }]
+            } catch (err) {
+              return [device.id, { ...sampleRule, _sample: true }]
+            }
+          }),
+        )
+
+        mapRuleStates(entries.filter(Boolean))
+      } finally {
+        setRuleStatesLoading(false)
+      }
+    },
+    [],
+  )
 
   const loadDevices = useCallback(async () => {
     setLoadingDevices(true)
     setDevicesError('')
     try {
       const { data } = await api.get('/api/devices')
-      setDevices(Array.isArray(data) ? data : [])
-      if (!Array.isArray(data) || data.length === 0) {
-        setDevices(sampleDevices)
-      }
+      const list = Array.isArray(data) && data.length > 0 ? data : sampleDevices
+      setDevices(list)
+      loadRuleStates(list)
     } catch (err) {
       const message =
         err?.response?.data?.message ?? err?.message ?? 'Unable to load devices. Showing sample data.'
       setDevicesError(message)
       setDevices(sampleDevices)
+      loadRuleStates(sampleDevices)
       toast(message, { icon: 'ℹ️' })
     } finally {
       setLoadingDevices(false)
     }
-  }, [])
+  }, [loadRuleStates])
 
   useEffect(() => {
     loadDevices()
@@ -100,6 +171,7 @@ const RuleManagementPage = () => {
     setLoadingRules(true)
     try {
       const { data } = await api.get(`/api/device-rules/${device.id}`)
+      mapRuleStates([[device.id, { ...data, _sample: false }]])
       setRuleValues({
         rate_limit_ppm: data?.rate_limit_ppm ?? '',
         mac_address: data?.mac_address ?? '',
@@ -113,6 +185,7 @@ const RuleManagementPage = () => {
       const message =
         err?.response?.data?.message ?? err?.message ?? 'Unable to load rules for this device. Showing sample data.'
       const sample = sampleRules[device.id] ?? sampleRules.fallback
+      mapRuleStates([[device.id, { ...sample, _sample: true }]])
       setRuleValues({
         rate_limit_ppm: sample.rate_limit_ppm,
         mac_address: sample.mac_address,
@@ -156,6 +229,54 @@ const RuleManagementPage = () => {
     setRuleErrors((prev) => ({ ...prev, [field]: undefined }))
   }
 
+  const handleToggleRuleEnabled = async (device) => {
+    if (!device?.id) return
+    const rule = ruleStates[device.id]
+    if (!rule) {
+      await loadRuleStates([device])
+      return
+    }
+
+    const hasRequired = rule.mac_address && rule.rate_limit_ppm && rule.max_packet_size
+    if (!hasRequired) {
+      toast.error('Please configure the rule before toggling Active.')
+      return
+    }
+
+    const nextEnabled = !rule.enabled
+    const optimisticRule = { ...rule, enabled: nextEnabled }
+    mapRuleStates([[device.id, optimisticRule]])
+
+    if (rule._sample) {
+      toast.success(`Rule ${nextEnabled ? 'activated' : 'Unactivated'} `)
+      return
+    }
+
+    setTogglingRuleId(device.id)
+    const payload = {
+      rate_limit_ppm: Number(rule.rate_limit_ppm) || 1,
+      mac_address: rule.mac_address || '',
+      mqtt_topics: Array.isArray(rule.mqtt_topics) ? rule.mqtt_topics : [],
+      ssid: rule.ssid || '',
+      max_packet_size: Number(rule.max_packet_size) || 1,
+      rssi_threshold:
+        rule.rssi_threshold === null || rule.rssi_threshold === '' ? null : Number(rule.rssi_threshold),
+      enabled: nextEnabled,
+    }
+
+    try {
+      const { data } = await api.put(`/api/device-rules/${device.id}`, payload)
+      mapRuleStates([[device.id, { ...data, _sample: false }]])
+      toast.success(`Rule ${nextEnabled ? 'activated' : 'Unactivated'}`)
+    } catch (err) {
+      mapRuleStates([[device.id, rule]])
+      const message = err?.response?.data?.message ?? err?.message ?? 'Unable to update rule status'
+      toast.error(message)
+    } finally {
+      setTogglingRuleId(null)
+    }
+  }
+
   const handleSave = async () => {
     const errors = validate()
     if (Object.keys(errors).length) {
@@ -180,7 +301,9 @@ const RuleManagementPage = () => {
 
     setSaving(true)
     try {
-      await api.put(`/api/device-rules/${selectedDevice.id}`, payload)
+      const { data } = await api.put(`/api/device-rules/${selectedDevice.id}`, payload)
+      const updatedRule = data?.rate_limit_ppm ? data : payload
+      mapRuleStates([[selectedDevice.id, { ...updatedRule, _sample: false }]])
       toast.success('Rules updated successfully')
       closeDrawer()
     } catch (err) {
@@ -245,6 +368,7 @@ const RuleManagementPage = () => {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">IP Address</th>
                   <th className="px-4 py-3 text-right">Setting</th>
+                  <th className="px-4 py-3 text-right">Active</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -263,11 +387,31 @@ const RuleManagementPage = () => {
                         Configure
                       </button>
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end">
+                        {/*
+                          Show Active toggle inline like ESP Config so users can see rule status at a glance.
+                          Disabled while loading state or when we lack rule data.
+                        */}
+                        {(() => {
+                          const ruleState = ruleStates[device.id]
+                          return (
+                            <ActiveToggle
+                              value={Boolean(ruleState?.enabled)}
+                              onToggle={() => handleToggleRuleEnabled(device)}
+                              disabled={
+                                togglingRuleId === device.id || ruleStatesLoading || !ruleState
+                              }
+                            />
+                          )
+                        })()}
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {!deviceRows.length && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">
+                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
                       No devices available for rule configuration.
                     </td>
                   </tr>
@@ -376,16 +520,6 @@ const RuleManagementPage = () => {
                       />
                     </div>
                   </div>
-
-                  <label className="flex items-center gap-3 text-sm font-semibold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(ruleValues.enabled)}
-                      onChange={(e) => handleChange('enabled', e.target.checked)}
-                      className="h-5 w-5 rounded border border-slate-300 text-sky-500 focus:ring-sky-500"
-                    />
-                    Rule Enabled
-                  </label>
 
                   <div className="flex justify-end gap-3 pt-4">
                     <button
