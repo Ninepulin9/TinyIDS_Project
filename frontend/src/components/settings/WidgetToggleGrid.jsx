@@ -4,18 +4,6 @@ import { Info } from 'lucide-react'
 import Switch from '../ui/Switch.jsx'
 
 const widgetDescriptions = {
-  total_detected_attacks: {
-    label: 'Total Detected Attacks',
-    description: 'Overall number of intrusion events caught across all sensors.',
-  },
-  total_packets_analyzed: {
-    label: 'Total Packets Analyzed',
-    description: 'Volume of traffic packets processed by TinyIDS collectors.',
-  },
-  device_activity_pct: {
-    label: 'Device Activity (%)',
-    description: 'Percentage of enrolled ESP32 devices currently active.',
-  },
   alerts_triggered: {
     label: 'Alerts Triggered',
     description: 'Count of alert notifications generated in the selected window.',

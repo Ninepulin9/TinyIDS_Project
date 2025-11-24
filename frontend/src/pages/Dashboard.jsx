@@ -9,30 +9,6 @@ import Button from '../components/ui/Button.jsx'
 
 const metricCards = [
   {
-    title: 'Total Detected Attacks',
-    key: 'detectedAttacks',
-    icon: Shield,
-    accent: 'text-sky-600 bg-sky-50',
-    description: 'Intrusion events TinyIDS automatically blocked across the fleet.',
-    settingKey: 'total_detected_attacks',
-  },
-  {
-    title: 'Total Packets Analyzed',
-    key: 'packetsAnalyzed',
-    icon: PackageSearch,
-    accent: 'text-indigo-600 bg-indigo-50',
-    description: 'Inbound packets inspected by ESP32 sensors and backend engines.',
-    settingKey: 'total_packets_analyzed',
-  },
-  {
-    title: 'Device Activity (%)',
-    key: 'deviceActivity',
-    icon: Activity,
-    accent: 'text-teal-600 bg-teal-50',
-    description: 'Share of ESP32 units currently online and reporting telemetry.',
-    settingKey: 'device_activity_pct',
-  },
-  {
     title: 'Alerts Triggered',
     key: 'alertsTriggered',
     icon: AlertTriangle,
@@ -58,9 +34,6 @@ const formatNumber = (value) => {
 }
 
 const defaultWidgetVisibility = {
-  total_detected_attacks: true,
-  total_packets_analyzed: true,
-  device_activity_pct: true,
   alerts_triggered: true,
   detection_trend_pct: false,
   packets_captured: true,
@@ -385,15 +358,9 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Packets Analyzed</p>
-                    <p className="text-xl font-semibold text-slate-900">
-                      {formatNumber(metrics.totals?.packetsAnalyzed)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Device Activity</p>
-                    <p className="text-xl font-semibold text-sky-600">
-                      {metrics.totals?.deviceActivity ?? '--'}%
+                    <p className="text-slate-500">Alerts (24h)</p>
+                    <p className="text-xl font-semibold text-amber-600">
+                      {metrics.totals?.alertsTriggered ?? '--'}
                     </p>
                   </div>
                 </div>

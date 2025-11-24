@@ -21,9 +21,6 @@ const timeframeOptions = [
 const defaultSettings = {
   graph_timeframe: 'days',
   widgets: {
-    total_detected_attacks: true,
-    total_packets_analyzed: true,
-    device_activity_pct: true,
     alerts_triggered: true,
     detection_trend_pct: false,
     packets_captured: true,
@@ -35,9 +32,6 @@ const defaultSettings = {
 const settingsSchema = z.object({
   graph_timeframe: z.enum(['seconds', 'minutes', 'hours', 'days', 'months']),
   widgets: z.object({
-    total_detected_attacks: z.boolean(),
-    total_packets_analyzed: z.boolean(),
-    device_activity_pct: z.boolean(),
     alerts_triggered: z.boolean(),
     detection_trend_pct: z.boolean(),
     packets_captured: z.boolean(),
