@@ -1,9 +1,8 @@
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ChevronRight, GaugeCircle, ListChecks, Shield, SlidersHorizontal, UserCircle2 } from 'lucide-react'
+import { ChevronRight, GaugeCircle, ListChecks, Shield, UserCircle2 } from 'lucide-react'
 import wifiIcon from '../assets/wi-fi-icon.png'
 import profileIcon from '../assets/profile.png'
 import controlIcon from '../assets/control.png'
-import dashboardIcon from '../assets/dashboard.png'
 import rule from '../assets/find.png'
 const sections = [
   {
@@ -24,7 +23,6 @@ const sections = [
   {
     title: 'Settings',
     items: [
-      { to: '/dashboard-settings', label: 'Dashboard Settings', icon: dashboardIcon },
       { to: '/settings', label: 'System Settings', icon: controlIcon },
       { to: '/users', label: 'User Settings', icon: profileIcon },
     ],

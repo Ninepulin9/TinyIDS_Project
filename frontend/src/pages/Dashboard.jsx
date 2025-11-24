@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Activity, AlertTriangle, BarChart3, Boxes, CircuitBoard, ListChecks, PackageSearch, RefreshCw, Shield } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart3, Boxes, CircuitBoard, PackageSearch, RefreshCw, Shield } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { useDashboardData, DASHBOARD_TIMEFRAMES } from '../hooks/useDashboardData'
 import api from '../lib/api'
@@ -25,14 +25,6 @@ const metricCards = [
     settingKey: 'total_packets_analyzed',
   },
   {
-    title: 'Detection Accuracy (%)',
-    key: 'detectionAccuracy',
-    icon: BarChart3,
-    accent: 'text-emerald-600 bg-emerald-50',
-    description: 'Signal-to-noise ratio of detection rules for the selected window.',
-    settingKey: 'detection_accuracy_pct',
-  },
-  {
     title: 'Device Activity (%)',
     key: 'deviceActivity',
     icon: Activity,
@@ -47,14 +39,6 @@ const metricCards = [
     accent: 'text-amber-600 bg-amber-50',
     description: 'Automated notifications dispatched to analysts and systems.',
     settingKey: 'alerts_triggered',
-  },
-  {
-    title: 'Rule Activation (%)',
-    key: 'ruleActivation',
-    icon: ListChecks,
-    accent: 'text-purple-600 bg-purple-50',
-    description: 'Percentage of IDS signatures currently active across devices.',
-    settingKey: 'rule_activation_pct',
   },
   {
     title: 'Packets Captured',
@@ -73,59 +57,13 @@ const formatNumber = (value) => {
   return value.toLocaleString()
 }
 
-const ThreatLevelIndicator = ({ percent = 0, onDownload }) => {
-  const level = percent < 40 ? 'Low' : percent < 70 ? 'Moderate' : 'Critical'
-  const colorClass = percent < 40 ? 'text-emerald-500' : percent < 70 ? 'text-amber-500' : 'text-rose-500'
-
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <div className="flex items-center gap-3">
-        <Shield className="h-10 w-10 text-slate-400" />
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Network Threat Level</p>
-          <p className={`text-lg font-semibold ${colorClass}`}>{level}</p>
-        </div>
-      </div>
-      <div className="relative mx-auto mt-6 flex h-40 w-40 items-center justify-center">
-        <div className="absolute inset-0 rounded-full bg-slate-100" />
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background: `conic-gradient(${percent < 40 ? '#10b981' : percent < 70 ? '#f59e0b' : '#f43f5e'} ${
-              percent * 3.6
-            }deg, #e2e8f0 ${percent * 3.6}deg)`,
-          }}
-        />
-        <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
-          <span className="text-3xl font-semibold text-slate-900">{percent}</span>
-          <span className="text-xs text-slate-500">%</span>
-        </div>
-        </div>
-        <p className="mt-4 text-sm text-slate-600">
-          Latest MQTT batch processed <span className="font-medium text-slate-900">12s ago</span>. Download the threat
-          report for a detailed breakdown.
-        </p>
-        <button
-          type="button"
-          onClick={onDownload}
-          className="mt-5 w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
-        >
-          Download Threat Report
-        </button>
-      </div>
-    )
-  }
-
 const defaultWidgetVisibility = {
   total_detected_attacks: true,
   total_packets_analyzed: true,
   device_activity_pct: true,
   alerts_triggered: true,
-  detection_accuracy_pct: true,
   detection_trend_pct: false,
-  rule_activation_pct: true,
   packets_captured: true,
-  threat_level_indicator: true,
   sensor_health_card: true,
   data_pipeline_card: true,
 }
@@ -196,7 +134,6 @@ const Dashboard = () => {
   const nodesDisplay = selectedDevice ? (selectedDevice.active ? 'Online' : 'Offline') : `${nodesOnline}/${totalDevices}`
   const alertsTriggered = metrics.totals?.alertsTriggered ?? 0
   const showTrendChart = widgetVisibility.detection_trend_pct !== false
-  const showThreatIndicator = widgetVisibility.threat_level_indicator !== false
   const showSensorCard = widgetVisibility.sensor_health_card !== false
   const showDataPipeline = widgetVisibility.data_pipeline_card !== false
 
@@ -219,8 +156,7 @@ const Dashboard = () => {
     pdf.text(`Reporting Window: ${timeframe}`, 14, 38)
     pdf.text(`Device Context: ${contextDeviceName}`, 14, 44)
     pdf.text(`MAC Address: ${contextMac}`, 14, 50)
-    pdf.text(`Current Threat Level: ${metrics.totals?.threatLevel ?? 0}%`, 14, 56)
-    pdf.text('Prepared by: TinyIDS Security Operations Center', 14, 62)
+    pdf.text('Prepared by: TinyIDS Security Operations Center', 14, 56)
 
     const metricRows = visibleMetricCards.map(({ title, key, description }) => {
       const rawValue = metrics.totals?.[key] ?? metrics.widgets?.[key]
@@ -231,14 +167,15 @@ const Dashboard = () => {
     })
 
     autoTable(pdf, {
-      startY: 56,
+      startY: 62,
       head: [['Metric', 'Value', 'Description']],
       body: metricRows,
       styles: { textColor: [20, 24, 33] },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
     })
 
-    const trendRows = widgetVisibility.detection_trend_pct === false ? [] : trendData.map((entry) => [entry.label, entry.value ?? 0])
+    const trendRows =
+      widgetVisibility.detection_trend_pct === false ? [] : trendData.map((entry) => [entry.label, entry.value ?? 0])
     if (trendRows.length) {
       autoTable(pdf, {
         startY: (pdf.lastAutoTable?.finalY ?? 66) + 12,
@@ -359,55 +296,45 @@ const Dashboard = () => {
           })}
         </section>
 
-        {(showTrendChart || showThreatIndicator) && (
-          <section
-            className={`mt-8 grid gap-6 ${
-              showTrendChart && showThreatIndicator ? 'lg:grid-cols-3' : 'lg:grid-cols-1'
-            }`}
-          >
-            {showTrendChart && (
-              <div className={`rounded-2xl bg-white p-6 shadow-sm ${showThreatIndicator ? 'lg:col-span-2' : ''}`}>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Detection Trend</p>
-                    <p className="text-lg font-semibold text-slate-900">Events observed via MQTT ingestion</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {DASHBOARD_TIMEFRAMES.map((frame) => (
-                      <button
-                        key={frame}
-                        onClick={() => setTimeframe(frame)}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
-                          timeframe === frame
-                            ? 'border-sky-500 bg-sky-50 text-sky-600'
-                            : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-                        }`}
-                      >
-                        {frame}
-                      </button>
-                    ))}
-                  </div>
+        {showTrendChart && (
+          <section className="mt-8">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Detection Trend</p>
+                  <p className="text-lg font-semibold text-slate-900">Events observed via MQTT ingestion</p>
                 </div>
-                <div className="mt-4 h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendData}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-slate-100" />
-                      <XAxis dataKey="label" stroke="#94a3b8" fontSize={12} />
-                      <YAxis stroke="#94a3b8" fontSize={12} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0' }}
-                        labelStyle={{ color: '#0f172a' }}
-                      />
-                      <Line type="monotone" dataKey="value" stroke="#0284c7" strokeWidth={3} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="flex flex-wrap gap-2">
+                  {DASHBOARD_TIMEFRAMES.map((frame) => (
+                    <button
+                      key={frame}
+                      onClick={() => setTimeframe(frame)}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
+                        timeframe === frame
+                          ? 'border-sky-500 bg-sky-50 text-sky-600'
+                          : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {frame}
+                    </button>
+                  ))}
                 </div>
               </div>
-            )}
-
-            {showThreatIndicator && (
-              <ThreatLevelIndicator percent={metrics.totals?.threatLevel ?? 0} onDownload={handleDownloadReport} />
-            )}
+              <div className="mt-4 h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-slate-100" />
+                    <XAxis dataKey="label" stroke="#94a3b8" fontSize={12} />
+                    <YAxis stroke="#94a3b8" fontSize={12} />
+                    <Tooltip
+                      contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0' }}
+                      labelStyle={{ color: '#0f172a' }}
+                    />
+                    <Line type="monotone" dataKey="value" stroke="#0284c7" strokeWidth={3} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </section>
         )}
 
@@ -426,10 +353,6 @@ const Dashboard = () => {
                   <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
                     <span className="text-slate-500">{selectedDevice ? 'Device Status' : 'ESP32 Nodes Online'}</span>
                     <span className="font-semibold text-slate-900">{nodesDisplay}</span>
-                  </li>
-                  <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                    <span className="text-slate-500">Rules Active</span>
-                    <span className="font-semibold text-slate-900">{metrics.totals?.ruleActivation ?? '--'}%</span>
                   </li>
                   <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
                     <span className="text-slate-500">Alerts Triggered (24h)</span>
@@ -465,12 +388,6 @@ const Dashboard = () => {
                     <p className="text-slate-500">Packets Analyzed</p>
                     <p className="text-xl font-semibold text-slate-900">
                       {formatNumber(metrics.totals?.packetsAnalyzed)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Detection Accuracy</p>
-                    <p className="text-xl font-semibold text-emerald-600">
-                      {metrics.totals?.detectionAccuracy ?? '--'}%
                     </p>
                   </div>
                   <div className="rounded-xl border border-slate-100 px-4 py-3">
