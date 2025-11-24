@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ChevronRight, GaugeCircle, ListChecks, Shield, UserCircle2 } from 'lucide-react'
+import { ChevronRight, GaugeCircle, ListChecks, Shield, UserCircle2, X } from 'lucide-react'
 import wifiIcon from '../assets/wi-fi-icon.png'
 import profileIcon from '../assets/profile.png'
 import controlIcon from '../assets/control.png'
@@ -43,6 +44,13 @@ const routeSubtitles = {
 const Layout = ({ onLogout, user }) => {
   const location = useLocation()
   const subtitle = routeSubtitles[location.pathname] ?? 'TinyIDS Platform'
+  const [showConfirm, setShowConfirm] = useState(false)
+  const handleLogout = () => setShowConfirm(true)
+  const confirmLogout = () => {
+    setShowConfirm(false)
+    onLogout?.()
+  }
+  const cancelLogout = () => setShowConfirm(false)
 
   return (
   <div className="flex min-h-screen bg-slate-100 text-slate-900">
@@ -116,7 +124,7 @@ const Layout = ({ onLogout, user }) => {
       <div className="sticky bottom-0 z-10 mt-auto border-t border-slate-100 bg-white px-6 py-5">
         <button
           type="button"
-          onClick={onLogout}
+          onClick={handleLogout}
           className="w-full rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-600"
         >
           Sign out
@@ -126,6 +134,43 @@ const Layout = ({ onLogout, user }) => {
     <main className="flex-1 px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
       <Outlet />
     </main>
+    {showConfirm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
+        <div className="w-full max-w-sm rounded-2xl bg-indigo-50 p-6 shadow-2xl ring-1 ring-indigo-100">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-indigo-800">Confirm logout</h2>
+              <hr className="mt-2 border-indigo-200" />
+              <p className="mt-3 text-sm text-indigo-900">Are you sure you want to log out?</p>
+            </div>
+            <button
+              type="button"
+              onClick={cancelLogout}
+              className="rounded-full p-1 text-indigo-300 transition hover:bg-indigo-100 hover:text-indigo-500"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={cancelLogout}
+              className="rounded-full border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirmLogout}
+              className="rounded-full bg-indigo-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 )}
 
