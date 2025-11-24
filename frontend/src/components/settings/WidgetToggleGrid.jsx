@@ -4,6 +4,14 @@ import { Info } from 'lucide-react'
 import Switch from '../ui/Switch.jsx'
 
 const widgetDescriptions = {
+  total_detected_attacks: {
+    label: 'Total Detected Attacks',
+    description: 'Overall number of intrusion events caught across all sensors.',
+  },
+  total_packets_analyzed: {
+    label: 'Total Packets Analyzed',
+    description: 'Volume of traffic packets processed by TinyIDS collectors.',
+  },
   alerts_triggered: {
     label: 'Alerts Triggered',
     description: 'Count of alert notifications generated in the selected window.',
@@ -12,17 +20,13 @@ const widgetDescriptions = {
     label: 'Detection Trend (%)',
     description: 'Day-over-day swing in detection accuracy to monitor drift.',
   },
-  packets_captured: {
-    label: 'Packets Captured',
-    description: 'Raw packets collected before preprocessing for IDS analysis.',
-  },
   sensor_health_card: {
     label: 'Sensor Fleet Status',
     description: 'Card summarizing online devices, rules active, and recent alerts.',
   },
   data_pipeline_card: {
-    label: 'Packets & Throughput',
-    description: 'Shows packet capture/analysis counts and detection accuracy.',
+    label: 'Device Activity Overview',
+    description: 'Shows fleet activity highlights for online devices.',
   },
 }
 

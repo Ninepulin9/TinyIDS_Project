@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Activity, AlertTriangle, BarChart3, Boxes, CircuitBoard, PackageSearch, RefreshCw, Shield } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart3, CircuitBoard, PackageSearch, RefreshCw, Shield } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { useDashboardData, DASHBOARD_TIMEFRAMES } from '../hooks/useDashboardData'
 import api from '../lib/api'
@@ -9,20 +9,28 @@ import Button from '../components/ui/Button.jsx'
 
 const metricCards = [
   {
+    title: 'Total Detected Attacks',
+    key: 'detectedAttacks',
+    icon: Shield,
+    accent: 'text-sky-600 bg-sky-50',
+    description: 'All intrusion events that TinyIDS can Detected.',
+    settingKey: 'total_detected_attacks',
+  },
+  {
+    title: 'Total Packets Analyzed',
+    key: 'packetsAnalyzed',
+    icon: PackageSearch,
+    accent: 'text-indigo-600 bg-indigo-50',
+    description: 'Total number of packets analyzed.',
+    settingKey: 'total_packets_analyzed',
+  },
+  {
     title: 'Alerts Triggered',
     key: 'alertsTriggered',
     icon: AlertTriangle,
     accent: 'text-amber-600 bg-amber-50',
-    description: 'Automated notifications dispatched to analysts and systems.',
+    description: 'Notifications sent by the system when an emergency occurs.',
     settingKey: 'alerts_triggered',
-  },
-  {
-    title: 'Packets Captured',
-    key: 'packetsCaptured',
-    icon: Boxes,
-    accent: 'text-rose-600 bg-rose-50',
-    description: 'Raw traffic samples stored for retrospective analysis.',
-    settingKey: 'packets_captured',
   },
 ]
 
@@ -34,9 +42,10 @@ const formatNumber = (value) => {
 }
 
 const defaultWidgetVisibility = {
+  total_detected_attacks: true,
+  total_packets_analyzed: true,
   alerts_triggered: true,
   detection_trend_pct: false,
-  packets_captured: true,
   sensor_health_card: true,
   data_pipeline_card: true,
 }
@@ -346,21 +355,15 @@ const Dashboard = () => {
                 <div className="flex items-center gap-3">
                   <Activity className="h-10 w-10 text-slate-400" />
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Data Pipeline</p>
-                    <p className="text-lg font-semibold">Packets &amp; Throughput</p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Fleet Activity</p>
+                    <p className="text-lg font-semibold">Device Activity Overview</p>
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Packets Captured</p>
-                    <p className="text-xl font-semibold text-slate-900">
-                      {formatNumber(metrics.totals?.packetsCaptured)}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Alerts (24h)</p>
-                    <p className="text-xl font-semibold text-amber-600">
-                      {metrics.totals?.alertsTriggered ?? '--'}
+                  <div className="rounded-xl border border-slate-100 px-4 py-3 md:col-span-2">
+                    <p className="text-slate-500">Device Activity</p>
+                    <p className="text-xl font-semibold text-sky-600">
+                      {metrics.totals?.deviceActivity ?? '--'}%
                     </p>
                   </div>
                 </div>

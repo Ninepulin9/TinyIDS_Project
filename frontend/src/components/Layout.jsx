@@ -135,35 +135,33 @@ const Layout = ({ onLogout, user }) => {
       <Outlet />
     </main>
     {showConfirm && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
-        <div className="w-full max-w-sm rounded-2xl bg-indigo-50 p-6 shadow-2xl ring-1 ring-indigo-100">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-indigo-800">Confirm logout</h2>
-              <hr className="mt-2 border-indigo-200" />
-              <p className="mt-3 text-sm text-indigo-900">Are you sure you want to log out?</p>
-            </div>
-            <button
-              type="button"
-              onClick={cancelLogout}
-              className="rounded-full p-1 text-indigo-300 transition hover:bg-indigo-100 hover:text-indigo-500"
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </button>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 backdrop-blur-sm">
+        <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-indigo-100">
+          <button
+            type="button"
+            onClick={cancelLogout}
+            className="absolute right-3 top-3 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <div>
+            <h2 className="text-lg font-semibold text-indigo-700">Confirm logout</h2>
+            <hr className="mt-2 border-sky-200" />
+            <p className="mt-3 text-sm text-slate-600">Are you sure you want to log out?</p>
           </div>
           <div className="mt-6 flex justify-end gap-3">
             <button
               type="button"
               onClick={cancelLogout}
-              className="rounded-full border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100"
+              className="rounded-full border border-indigo-100 bg-white px-5 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={confirmLogout}
-              className="rounded-full bg-indigo-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600"
+              className="rounded-full bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:via-indigo-700 hover:to-sky-600"
             >
               OK
             </button>
