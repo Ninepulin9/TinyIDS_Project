@@ -12,41 +12,21 @@ const widgetDescriptions = {
     label: 'Total Packets Analyzed',
     description: 'Volume of traffic packets processed by TinyIDS collectors.',
   },
-  device_activity_pct: {
-    label: 'Device Activity (%)',
-    description: 'Percentage of enrolled ESP32 devices currently active.',
-  },
   alerts_triggered: {
     label: 'Alerts Triggered',
     description: 'Count of alert notifications generated in the selected window.',
   },
-  detection_accuracy_pct: {
-    label: 'Detection Accuracy (%)',
-    description: 'Precision of anomaly detection rules over the chosen timeframe.',
-  },
   detection_trend_pct: {
     label: 'Detection Trend (%)',
     description: 'Day-over-day swing in detection accuracy to monitor drift.',
-  },
-  rule_activation_pct: {
-    label: 'Rule Activation (%)',
-    description: 'Share of IDS rules currently activated on the backend.',
-  },
-  packets_captured: {
-    label: 'Packets Captured',
-    description: 'Raw packets collected before preprocessing for IDS analysis.',
-  },
-  threat_level_indicator: {
-    label: 'Threat Level Indicator',
-    description: 'Circular gauge summarizing current TinyIDS threat posture.',
   },
   sensor_health_card: {
     label: 'Sensor Fleet Status',
     description: 'Card summarizing online devices, rules active, and recent alerts.',
   },
   data_pipeline_card: {
-    label: 'Packets & Throughput',
-    description: 'Shows packet capture/analysis counts and detection accuracy.',
+    label: 'Device Activity Overview',
+    description: 'Shows fleet activity highlights for online devices.',
   },
 }
 
