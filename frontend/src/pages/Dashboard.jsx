@@ -5,6 +5,7 @@ import { Activity, AlertTriangle, BarChart3, Boxes, CircuitBoard, ListChecks, Pa
 import { ResponsiveContainer, LineChart, Line, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { useDashboardData, DASHBOARD_TIMEFRAMES } from '../hooks/useDashboardData'
 import api from '../lib/api'
+import { getSocket } from '../lib/socket'
 import Button from '../components/ui/Button.jsx'
 
 const metricCards = [
@@ -73,49 +74,6 @@ const formatNumber = (value) => {
   return value.toLocaleString()
 }
 
-// const ThreatLevelIndicator = ({ percent = 0, onDownload }) => {
-//   const level = percent < 40 ? 'Low' : percent < 70 ? 'Moderate' : 'Critical'
-//   const colorClass = percent < 40 ? 'text-emerald-500' : percent < 70 ? 'text-amber-500' : 'text-rose-500'
-
-//   return (
-//     <div className="rounded-2xl bg-white p-6 shadow-sm">
-//       <div className="flex items-center gap-3">
-//         <Shield className="h-10 w-10 text-slate-400" />
-//         <div>
-//           <p className="text-xs uppercase tracking-wide text-slate-500">Network Threat Level</p>
-//           <p className={`text-lg font-semibold ${colorClass}`}>{level}</p>
-//         </div>
-//       </div>
-//       <div className="relative mx-auto mt-6 flex h-40 w-40 items-center justify-center">
-//         <div className="absolute inset-0 rounded-full bg-slate-100" />
-//         <div
-//           className="absolute inset-0 rounded-full"
-//           style={{
-//             background: `conic-gradient(${percent < 40 ? '#10b981' : percent < 70 ? '#f59e0b' : '#f43f5e'} ${
-//               percent * 3.6
-//             }deg, #e2e8f0 ${percent * 3.6}deg)`,
-//           }}
-//         />
-//         <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
-//           <span className="text-3xl font-semibold text-slate-900">{percent}</span>
-//           <span className="text-xs text-slate-500">%</span>
-//         </div>
-//         </div>
-//         <p className="mt-4 text-sm text-slate-600">
-//           Latest MQTT batch processed <span className="font-medium text-slate-900">12s ago</span>. Download the threat
-//           report for a detailed breakdown.
-//         </p>
-//         <button
-//           type="button"
-//           onClick={onDownload}
-//           className="mt-5 w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
-//         >
-//           Download Threat Report
-//         </button>
-//       </div>
-//     )
-//   }
-
 const defaultWidgetVisibility = {
   total_detected_attacks: true,
   total_packets_analyzed: true,
@@ -178,6 +136,17 @@ const Dashboard = () => {
     return () => window.removeEventListener('dashboard:settings-updated', handleSettingsUpdated)
   }, [normalizeVisibility])
 
+  useEffect(() => {
+    const socket = getSocket()
+    const handleLogUpdate = () => {
+      refresh()
+    }
+    socket.on('log:new', handleLogUpdate)
+    return () => {
+      socket.off('log:new', handleLogUpdate)
+    }
+  }, [refresh])
+
   const visibleMetricCards = useMemo(
     () => metricCards.filter(({ settingKey }) => widgetVisibility[settingKey] !== false),
     [widgetVisibility],
@@ -196,7 +165,6 @@ const Dashboard = () => {
   const nodesDisplay = selectedDevice ? (selectedDevice.active ? 'Online' : 'Offline') : `${nodesOnline}/${totalDevices}`
   const alertsTriggered = metrics.totals?.alertsTriggered ?? 0
   const showTrendChart = widgetVisibility.detection_trend_pct !== false
-  const showThreatIndicator = widgetVisibility.threat_level_indicator !== false
   const showSensorCard = widgetVisibility.sensor_health_card !== false
   const showDataPipeline = widgetVisibility.data_pipeline_card !== false
 
@@ -359,14 +327,12 @@ const Dashboard = () => {
           })}
         </section>
 
-        {(showTrendChart || showThreatIndicator) && (
+        {showTrendChart && (
           <section
-            className={`mt-8 grid gap-6 ${
-              showTrendChart && showThreatIndicator ? 'lg:grid-cols-3' : 'lg:grid-cols-1'
-            }`}
+            className="mt-8 grid gap-6 lg:grid-cols-1"
           >
             {showTrendChart && (
-              <div className={`rounded-2xl bg-white p-6 shadow-sm ${showThreatIndicator ? 'lg:col-span-2' : ''}`}>
+              <div className="rounded-2xl bg-white p-6 shadow-sm">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-slate-500">Detection Trend</p>
@@ -403,10 +369,6 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
-            )}
-
-            {showThreatIndicator && (
-              <ThreatLevelIndicator percent={metrics.totals?.threatLevel ?? 0} onDownload={handleDownloadReport} />
             )}
           </section>
         )}

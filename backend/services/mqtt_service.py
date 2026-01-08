@@ -3,6 +3,7 @@ import threading
 from typing import Optional
 
 import paho.mqtt.client as mqtt
+from sqlalchemy.exc import IntegrityError
 
 from extensions import db, socketio
 from models import Device, Log, User
@@ -70,6 +71,8 @@ class MQTTService:
             esp_id = payload.get("device_id")
             if esp_id:
                 device = Device.query.filter_by(esp_id=esp_id).first()
+            if device and payload.get("device_name") and device.name != payload["device_name"]:
+                device.name = payload["device_name"]
             if not device:
                 owner = User.query.first()
                 owner_id = owner.id if owner else 1
@@ -79,6 +82,11 @@ class MQTTService:
                     esp_id=esp_id or "unknown",
                 )
                 db.session.add(device)
+                try:
+                    db.session.flush()
+                except IntegrityError:
+                    db.session.rollback()
+                    device = Device.query.filter_by(esp_id=esp_id).first()
 
             log = Log(
                 user_id=device.user_id,
