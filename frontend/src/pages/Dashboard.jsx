@@ -48,14 +48,14 @@ const metricCards = [
     description: 'Automated notifications dispatched to analysts and systems.',
     settingKey: 'alerts_triggered',
   },
-  {
-    title: 'Rule Activation (%)',
-    key: 'ruleActivation',
-    icon: ListChecks,
-    accent: 'text-purple-600 bg-purple-50',
-    description: 'Percentage of IDS signatures currently active across devices.',
-    settingKey: 'rule_activation_pct',
-  },
+  // {
+  //   title: 'Rule Activation (%)',
+  //   key: 'ruleActivation',
+  //   icon: ListChecks,
+  //   accent: 'text-purple-600 bg-purple-50',
+  //   description: 'Percentage of IDS signatures currently active across devices.',
+  //   settingKey: 'rule_activation_pct',
+  // },
   {
     title: 'Packets Captured',
     key: 'packetsCaptured',
@@ -73,48 +73,48 @@ const formatNumber = (value) => {
   return value.toLocaleString()
 }
 
-const ThreatLevelIndicator = ({ percent = 0, onDownload }) => {
-  const level = percent < 40 ? 'Low' : percent < 70 ? 'Moderate' : 'Critical'
-  const colorClass = percent < 40 ? 'text-emerald-500' : percent < 70 ? 'text-amber-500' : 'text-rose-500'
+// const ThreatLevelIndicator = ({ percent = 0, onDownload }) => {
+//   const level = percent < 40 ? 'Low' : percent < 70 ? 'Moderate' : 'Critical'
+//   const colorClass = percent < 40 ? 'text-emerald-500' : percent < 70 ? 'text-amber-500' : 'text-rose-500'
 
-  return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm">
-      <div className="flex items-center gap-3">
-        <Shield className="h-10 w-10 text-slate-400" />
-        <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Network Threat Level</p>
-          <p className={`text-lg font-semibold ${colorClass}`}>{level}</p>
-        </div>
-      </div>
-      <div className="relative mx-auto mt-6 flex h-40 w-40 items-center justify-center">
-        <div className="absolute inset-0 rounded-full bg-slate-100" />
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background: `conic-gradient(${percent < 40 ? '#10b981' : percent < 70 ? '#f59e0b' : '#f43f5e'} ${
-              percent * 3.6
-            }deg, #e2e8f0 ${percent * 3.6}deg)`,
-          }}
-        />
-        <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
-          <span className="text-3xl font-semibold text-slate-900">{percent}</span>
-          <span className="text-xs text-slate-500">%</span>
-        </div>
-        </div>
-        <p className="mt-4 text-sm text-slate-600">
-          Latest MQTT batch processed <span className="font-medium text-slate-900">12s ago</span>. Download the threat
-          report for a detailed breakdown.
-        </p>
-        <button
-          type="button"
-          onClick={onDownload}
-          className="mt-5 w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
-        >
-          Download Threat Report
-        </button>
-      </div>
-    )
-  }
+//   return (
+//     <div className="rounded-2xl bg-white p-6 shadow-sm">
+//       <div className="flex items-center gap-3">
+//         <Shield className="h-10 w-10 text-slate-400" />
+//         <div>
+//           <p className="text-xs uppercase tracking-wide text-slate-500">Network Threat Level</p>
+//           <p className={`text-lg font-semibold ${colorClass}`}>{level}</p>
+//         </div>
+//       </div>
+//       <div className="relative mx-auto mt-6 flex h-40 w-40 items-center justify-center">
+//         <div className="absolute inset-0 rounded-full bg-slate-100" />
+//         <div
+//           className="absolute inset-0 rounded-full"
+//           style={{
+//             background: `conic-gradient(${percent < 40 ? '#10b981' : percent < 70 ? '#f59e0b' : '#f43f5e'} ${
+//               percent * 3.6
+//             }deg, #e2e8f0 ${percent * 3.6}deg)`,
+//           }}
+//         />
+//         <div className="relative flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
+//           <span className="text-3xl font-semibold text-slate-900">{percent}</span>
+//           <span className="text-xs text-slate-500">%</span>
+//         </div>
+//         </div>
+//         <p className="mt-4 text-sm text-slate-600">
+//           Latest MQTT batch processed <span className="font-medium text-slate-900">12s ago</span>. Download the threat
+//           report for a detailed breakdown.
+//         </p>
+//         <button
+//           type="button"
+//           onClick={onDownload}
+//           className="mt-5 w-full rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-500"
+//         >
+//           Download Threat Report
+//         </button>
+//       </div>
+//     )
+//   }
 
 const defaultWidgetVisibility = {
   total_detected_attacks: true,

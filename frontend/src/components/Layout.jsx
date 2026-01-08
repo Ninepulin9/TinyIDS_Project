@@ -24,7 +24,7 @@ const sections = [
   {
     title: 'Settings',
     items: [
-      { to: '/dashboard-settings', label: 'Dashboard Settings', icon: dashboardIcon },
+      // { to: '/dashboard-settings', label: 'Dashboard Settings', icon: dashboardIcon },
       { to: '/settings', label: 'System Settings', icon: controlIcon },
       { to: '/users', label: 'User Settings', icon: profileIcon },
     ],
