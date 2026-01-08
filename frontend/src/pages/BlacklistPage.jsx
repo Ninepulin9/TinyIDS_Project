@@ -180,7 +180,7 @@ const BlacklistPage = () => {
                     <th className="px-6 py-3">Time stamp</th>
                     <th className="px-6 py-3">Device</th>
                     <th className="px-6 py-3">IP Address</th>
-                    <th className="px-6 py-3">Reason</th>
+                    <th className="px-6 py-3">Type</th>
                     <th className="px-6 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
