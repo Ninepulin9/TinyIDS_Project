@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { ChevronRight, GaugeCircle, ListChecks, Shield, SlidersHorizontal, UserCircle2 } from 'lucide-react'
 import wifiIcon from '../assets/wi-fi-icon.png'
@@ -45,6 +46,7 @@ const routeSubtitles = {
 const Layout = ({ onLogout, user }) => {
   const location = useLocation()
   const subtitle = routeSubtitles[location.pathname] ?? 'TinyIDS Platform'
+  const [showConfirm, setShowConfirm] = useState(false)
 
   return (
   <div className="flex min-h-screen bg-slate-100 text-slate-900">
@@ -118,7 +120,7 @@ const Layout = ({ onLogout, user }) => {
       <div className="sticky bottom-0 z-10 mt-auto border-t border-slate-100 bg-white px-6 py-5">
         <button
           type="button"
-          onClick={onLogout}
+          onClick={() => setShowConfirm(true)}
           className="w-full rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-600"
         >
           Sign out
@@ -128,6 +130,34 @@ const Layout = ({ onLogout, user }) => {
     <main className="flex-1 px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
       <Outlet />
     </main>
+
+    {showConfirm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+        <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+          <h3 className="text-lg font-semibold text-slate-900">Sign out?</h3>
+          <p className="mt-2 text-sm text-slate-600">You will be logged out of TinyIDS.</p>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowConfirm(false)}
+              className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowConfirm(false)
+                onLogout?.()
+              }}
+              className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-600"
+            >
+              Yes, sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 )}
 
