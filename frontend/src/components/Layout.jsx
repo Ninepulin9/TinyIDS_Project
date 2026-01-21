@@ -1,9 +1,9 @@
-import { useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ChevronRight, GaugeCircle, ListChecks, Shield, UserCircle2, X } from 'lucide-react'
+import { ChevronRight, GaugeCircle, ListChecks, Shield, SlidersHorizontal, UserCircle2 } from 'lucide-react'
 import wifiIcon from '../assets/wi-fi-icon.png'
 import profileIcon from '../assets/profile.png'
 import controlIcon from '../assets/control.png'
+import dashboardIcon from '../assets/dashboard.png'
 import rule from '../assets/find.png'
 const sections = [
   {
@@ -24,6 +24,7 @@ const sections = [
   {
     title: 'Settings',
     items: [
+      // { to: '/dashboard-settings', label: 'Dashboard Settings', icon: dashboardIcon },
       { to: '/settings', label: 'System Settings', icon: controlIcon },
       { to: '/users', label: 'User Settings', icon: profileIcon },
     ],
@@ -44,13 +45,6 @@ const routeSubtitles = {
 const Layout = ({ onLogout, user }) => {
   const location = useLocation()
   const subtitle = routeSubtitles[location.pathname] ?? 'TinyIDS Platform'
-  const [showConfirm, setShowConfirm] = useState(false)
-  const handleLogout = () => setShowConfirm(true)
-  const confirmLogout = () => {
-    setShowConfirm(false)
-    onLogout?.()
-  }
-  const cancelLogout = () => setShowConfirm(false)
 
   return (
   <div className="flex min-h-screen bg-slate-100 text-slate-900">
@@ -124,7 +118,7 @@ const Layout = ({ onLogout, user }) => {
       <div className="sticky bottom-0 z-10 mt-auto border-t border-slate-100 bg-white px-6 py-5">
         <button
           type="button"
-          onClick={handleLogout}
+          onClick={onLogout}
           className="w-full rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-600"
         >
           Sign out
@@ -134,41 +128,6 @@ const Layout = ({ onLogout, user }) => {
     <main className="flex-1 px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
       <Outlet />
     </main>
-    {showConfirm && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 backdrop-blur-sm">
-        <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-indigo-100">
-          <button
-            type="button"
-            onClick={cancelLogout}
-            className="absolute right-3 top-3 rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-          <div>
-            <h2 className="text-lg font-semibold text-indigo-700">Confirm logout</h2>
-            <hr className="mt-2 border-sky-200" />
-            <p className="mt-3 text-sm text-slate-600">Are you sure you want to log out?</p>
-          </div>
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={cancelLogout}
-              className="rounded-full border border-indigo-100 bg-white px-5 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={confirmLogout}
-              className="rounded-full bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-indigo-600 hover:via-indigo-700 hover:to-sky-600"
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
   </div>
 )}
 

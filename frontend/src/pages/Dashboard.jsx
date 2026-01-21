@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Activity, AlertTriangle, CircuitBoard, PackageSearch, Shield } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart3, Boxes, CircuitBoard, PackageSearch, Shield } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { useDashboardData, DASHBOARD_TIMEFRAMES } from '../hooks/useDashboardData'
 import api from '../lib/api'
@@ -13,7 +13,7 @@ const metricCards = [
     key: 'detectedAttacks',
     icon: Shield,
     accent: 'text-sky-600 bg-sky-50',
-    description: 'All intrusion events that TinyIDS can Detected.',
+    description: 'Intrusion events TinyIDS automatically blocked across the fleet.',
     settingKey: 'total_detected_attacks',
   },
   {
@@ -21,16 +21,48 @@ const metricCards = [
     key: 'packetsAnalyzed',
     icon: PackageSearch,
     accent: 'text-indigo-600 bg-indigo-50',
-    description: 'Total number of packets analyzed.',
+    description: 'Inbound packets inspected by ESP32 sensors and backend engines.',
     settingKey: 'total_packets_analyzed',
+  },
+  {
+    title: 'Detection Accuracy (%)',
+    key: 'detectionAccuracy',
+    icon: BarChart3,
+    accent: 'text-emerald-600 bg-emerald-50',
+    description: 'Signal-to-noise ratio of detection rules for the selected window.',
+    settingKey: 'detection_accuracy_pct',
+  },
+  {
+    title: 'Device Activity (%)',
+    key: 'deviceActivity',
+    icon: Activity,
+    accent: 'text-teal-600 bg-teal-50',
+    description: 'Share of ESP32 units currently online and reporting telemetry.',
+    settingKey: 'device_activity_pct',
   },
   {
     title: 'Alerts Triggered',
     key: 'alertsTriggered',
     icon: AlertTriangle,
     accent: 'text-amber-600 bg-amber-50',
-    description: 'Notifications sent by the system when an emergency occurs.',
+    description: 'Automated notifications dispatched to analysts and systems.',
     settingKey: 'alerts_triggered',
+  },
+  // {
+  //   title: 'Rule Activation (%)',
+  //   key: 'ruleActivation',
+  //   icon: ListChecks,
+  //   accent: 'text-purple-600 bg-purple-50',
+  //   description: 'Percentage of IDS signatures currently active across devices.',
+  //   settingKey: 'rule_activation_pct',
+  // },
+  {
+    title: 'Packets Captured',
+    key: 'packetsCaptured',
+    icon: Boxes,
+    accent: 'text-rose-600 bg-rose-50',
+    description: 'Raw traffic samples stored for retrospective analysis.',
+    settingKey: 'packets_captured',
   },
 ]
 
@@ -44,8 +76,13 @@ const formatNumber = (value) => {
 const defaultWidgetVisibility = {
   total_detected_attacks: true,
   total_packets_analyzed: true,
+  device_activity_pct: true,
   alerts_triggered: true,
+  detection_accuracy_pct: true,
   detection_trend_pct: false,
+  rule_activation_pct: true,
+  packets_captured: true,
+  threat_level_indicator: true,
   sensor_health_card: true,
   data_pipeline_card: true,
 }
@@ -167,7 +204,8 @@ const Dashboard = () => {
     pdf.text(`Reporting Window: ${timeframe}`, 14, 38)
     pdf.text(`Device Context: ${contextDeviceName}`, 14, 44)
     pdf.text(`MAC Address: ${contextMac}`, 14, 50)
-    pdf.text('Prepared by: TinyIDS Security Operations Center', 14, 56)
+    pdf.text(`Current Threat Level: ${metrics.totals?.threatLevel ?? 0}%`, 14, 56)
+    pdf.text('Prepared by: TinyIDS Security Operations Center', 14, 62)
 
     const metricRows = visibleMetricCards.map(({ title, key, description }) => {
       const rawValue = metrics.totals?.[key] ?? metrics.widgets?.[key]
@@ -178,15 +216,14 @@ const Dashboard = () => {
     })
 
     autoTable(pdf, {
-      startY: 62,
+      startY: 56,
       head: [['Metric', 'Value', 'Description']],
       body: metricRows,
       styles: { textColor: [20, 24, 33] },
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
     })
 
-    const trendRows =
-      widgetVisibility.detection_trend_pct === false ? [] : trendData.map((entry) => [entry.label, entry.value ?? 0])
+    const trendRows = widgetVisibility.detection_trend_pct === false ? [] : trendData.map((entry) => [entry.label, entry.value ?? 0])
     if (trendRows.length) {
       autoTable(pdf, {
         startY: (pdf.lastAutoTable?.finalY ?? 66) + 12,
@@ -291,44 +328,48 @@ const Dashboard = () => {
         </section>
 
         {showTrendChart && (
-          <section className="mt-8">
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Detection Trend</p>
-                  <p className="text-lg font-semibold text-slate-900">Events observed via MQTT ingestion</p>
+          <section
+            className="mt-8 grid gap-6 lg:grid-cols-1"
+          >
+            {showTrendChart && (
+              <div className="rounded-2xl bg-white p-6 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Detection Trend</p>
+                    <p className="text-lg font-semibold text-slate-900">Events observed via MQTT ingestion</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {DASHBOARD_TIMEFRAMES.map((frame) => (
+                      <button
+                        key={frame}
+                        onClick={() => setTimeframe(frame)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
+                          timeframe === frame
+                            ? 'border-sky-500 bg-sky-50 text-sky-600'
+                            : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                        }`}
+                      >
+                        {frame}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {DASHBOARD_TIMEFRAMES.map((frame) => (
-                    <button
-                      key={frame}
-                      onClick={() => setTimeframe(frame)}
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
-                        timeframe === frame
-                          ? 'border-sky-500 bg-sky-50 text-sky-600'
-                          : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      {frame}
-                    </button>
-                  ))}
+                <div className="mt-4 h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-slate-100" />
+                      <XAxis dataKey="label" stroke="#94a3b8" fontSize={12} />
+                      <YAxis stroke="#94a3b8" fontSize={12} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0' }}
+                        labelStyle={{ color: '#0f172a' }}
+                      />
+                      <Line type="monotone" dataKey="value" stroke="#0284c7" strokeWidth={3} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
-              <div className="mt-4 h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-slate-100" />
-                    <XAxis dataKey="label" stroke="#94a3b8" fontSize={12} />
-                    <YAxis stroke="#94a3b8" fontSize={12} />
-                    <Tooltip
-                      contentStyle={{ borderRadius: '12px', borderColor: '#e2e8f0' }}
-                      labelStyle={{ color: '#0f172a' }}
-                    />
-                    <Line type="monotone" dataKey="value" stroke="#0284c7" strokeWidth={3} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+            )}
           </section>
         )}
 
@@ -349,6 +390,10 @@ const Dashboard = () => {
                     <span className="font-semibold text-slate-900">{nodesDisplay}</span>
                   </li>
                   <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                    <span className="text-slate-500">Rules Active</span>
+                    <span className="font-semibold text-slate-900">{metrics.totals?.ruleActivation ?? '--'}%</span>
+                  </li>
+                  <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
                     <span className="text-slate-500">Alerts Triggered (24h)</span>
                     <span className="font-semibold text-slate-900">{alertsTriggered}</span>
                   </li>
@@ -367,12 +412,30 @@ const Dashboard = () => {
                 <div className="flex items-center gap-3">
                   <Activity className="h-10 w-10 text-slate-400" />
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Fleet Activity</p>
-                    <p className="text-lg font-semibold">Device Activity Overview</p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Data Pipeline</p>
+                    <p className="text-lg font-semibold">Packets &amp; Throughput</p>
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                  <div className="rounded-xl border border-slate-100 px-4 py-3 md:col-span-2">
+                  <div className="rounded-xl border border-slate-100 px-4 py-3">
+                    <p className="text-slate-500">Packets Captured</p>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {formatNumber(metrics.totals?.packetsCaptured)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 px-4 py-3">
+                    <p className="text-slate-500">Packets Analyzed</p>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {formatNumber(metrics.totals?.packetsAnalyzed)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 px-4 py-3">
+                    <p className="text-slate-500">Detection Accuracy</p>
+                    <p className="text-xl font-semibold text-emerald-600">
+                      {metrics.totals?.detectionAccuracy ?? '--'}%
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 px-4 py-3">
                     <p className="text-slate-500">Device Activity</p>
                     <p className="text-xl font-semibold text-sky-600">
                       {metrics.totals?.deviceActivity ?? '--'}%
