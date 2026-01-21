@@ -61,6 +61,7 @@ def _serialize_log(log: Log) -> dict:
         "detail",
         "message",
         "summary",
+        "alert_msg",
         default="No additional context provided.",
     )
 

@@ -1,18 +1,125 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, Settings, X } from 'lucide-react'
+import { Loader2, Settings } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import api from '../api/axios'
 
 const defaultRuleState = {
-  rate_limit_ppm: '',
-  mac_address: '',
-  mqtt_topics: '',
-  ssid: '',
-  max_packet_size: '',
-  rssi_threshold: '',
-  enabled: false,
+  token: '',
+  cfg_rate_limit_count: '',
+  cfg_rate_limit_seconds: '',
+  cfg_oversized_threshold: '',
+  cfg_http_url_max_len: '',
+  cfg_rssi_diff_threshold: '',
+  cfg_syn_flood_threshold: '',
+  cfg_syn_flood_seconds: '',
+  cfg_syn_timeout: '',
+  cfg_http_bf_threshold: '',
+  cfg_http_bf_window: '',
+  cfg_http_bf_block_time: '',
+  cfg_deauth_cooldown_ms: '',
+  g_trusted_channel: '',
+  g_target_trusted_mac: '',
+  g_mqtt_whitelist: '',
+  blocked_ips: '',
 }
+
+const ruleSections = [
+  {
+    id: 'rate_limit',
+    title: 'Rate Limiting',
+    subtitle: 'CFG_RATE_LIMIT_COUNT / CFG_RATE_LIMIT_SECONDS',
+    description: 'Limit how many events are allowed in a time window to avoid flooding.',
+    fields: [
+      { key: 'cfg_rate_limit_count', label: 'Requests per Window', helper: 'CFG_RATE_LIMIT_COUNT', type: 'number', required: true },
+      { key: 'cfg_rate_limit_seconds', label: 'Window (seconds)', helper: 'CFG_RATE_LIMIT_SECONDS', type: 'number', required: true },
+    ],
+  },
+  {
+    id: 'oversize_http',
+    title: 'Oversized & HTTP Constraints',
+    subtitle: 'Payload and URL safety',
+    description: 'Protect against oversized payloads and long URLs; tune RSSI threshold.',
+    fields: [
+      { key: 'cfg_oversized_threshold', label: 'Oversized Threshold (bytes)', helper: 'CFG_OVERSIZED_THRESHOLD', type: 'number' },
+      { key: 'cfg_http_url_max_len', label: 'HTTP URL Max Length', helper: 'CFG_HTTP_URL_MAX_LEN', type: 'number' },
+      { key: 'cfg_rssi_diff_threshold', label: 'RSSI Diff Threshold', helper: 'CFG_RSSI_DIFF_THRESHOLD', type: 'number' },
+    ],
+  },
+  {
+    id: 'syn',
+    title: 'SYN Flood Protection',
+    subtitle: 'SYN thresholds and timeout',
+    description: 'Detect and react to SYN flood attempts.',
+    fields: [
+      { key: 'cfg_syn_flood_threshold', label: 'SYN Flood Threshold', helper: 'CFG_SYN_FLOOD_THRESHOLD', type: 'number' },
+      { key: 'cfg_syn_flood_seconds', label: 'SYN Flood Window (seconds)', helper: 'CFG_SYN_FLOOD_SECONDS', type: 'number' },
+      { key: 'cfg_syn_timeout', label: 'SYN Timeout (seconds)', helper: 'CFG_SYN_TIMEOUT', type: 'number' },
+    ],
+  },
+  {
+    id: 'http_bf',
+    title: 'HTTP Brute Force',
+    subtitle: 'Threshold, window, block time',
+    description: 'Set limits for HTTP brute-force detection and block duration.',
+    fields: [
+      { key: 'cfg_http_bf_threshold', label: 'HTTP BF Threshold', helper: 'CFG_HTTP_BF_THRESHOLD', type: 'number' },
+      { key: 'cfg_http_bf_window', label: 'HTTP BF Window (seconds)', helper: 'CFG_HTTP_BF_WINDOW', type: 'number' },
+      { key: 'cfg_http_bf_block_time', label: 'HTTP BF Block Time (seconds)', helper: 'CFG_HTTP_BF_BLOCK_TIME', type: 'number' },
+    ],
+  },
+  {
+    id: 'deauth',
+    title: 'Deauth Cooldown',
+    subtitle: 'Cooldown after detection',
+    description: 'Delay before accepting new auth attempts after deauth events.',
+    fields: [{ key: 'cfg_deauth_cooldown_ms', label: 'Deauth Cooldown (ms)', helper: 'CFG_DEAUTH_COOLDOWN_MS', type: 'number', fullWidth: true }],
+  },
+  {
+    id: 'trust',
+    title: 'Trusted Channels & MACs',
+    subtitle: 'g_trusted_channel / g_target_trusted_mac',
+    description: 'Comma separated lists of Wi‑Fi channels and MAC addresses that are allowed.',
+    fields: [
+      {
+        key: 'g_trusted_channel',
+        label: 'Trusted Channels',
+        helper: 'g_trusted_channel (comma-separated)',
+        placeholder: '8, 9, 11',
+        type: 'text',
+      },
+      {
+        key: 'g_target_trusted_mac',
+        label: 'Trusted MACs',
+        helper: 'g_target_trusted_mac (comma-separated)',
+        placeholder: '00:00:00:00:00:00',
+        type: 'text',
+      },
+    ],
+  },
+  {
+    id: 'whitelist',
+    title: 'MQTT Whitelist & Blocked IPs',
+    subtitle: 'g_mqtt_whitelist / blocked_ips',
+    description: 'Topics allowed to publish/subscribe and IPs blocked by IDS.',
+    fields: [
+      {
+        key: 'g_mqtt_whitelist',
+        label: 'MQTT Whitelist Topics',
+        helper: 'g_mqtt_whitelist (comma-separated)',
+        placeholder: 'test/data, device/status',
+        type: 'text',
+      },
+      {
+        key: 'blocked_ips',
+        label: 'Blocked IPs',
+        helper: 'blocked_ips (comma-separated)',
+        placeholder: '192.168.1.10, 192.168.1.11',
+        type: 'text',
+      },
+    ],
+  },
+]
 
 const Spinner = ({ label }) => (
   <div className="flex flex-col items-center justify-center gap-3 py-12 text-sm text-slate-500">
@@ -20,71 +127,6 @@ const Spinner = ({ label }) => (
     {label && <p>{label}</p>}
   </div>
 )
-
-const sampleDevices = [
-  { id: 101, name: 'Lab Sensor A', status: 'online', ip_address: '192.168.10.21' },
-  { id: 102, name: 'Warehouse ESP-7', status: 'offline', ip_address: '10.0.30.15' },
-  { id: 103, name: 'Perimeter Node 3', status: 'online', ip_address: '172.16.0.45' },
-]
-
-const sampleRules = {
-  101: {
-    rate_limit_ppm: 45,
-    mac_address: 'AA:BB:CC:DD:EE:AA',
-    mqtt_topics: ['esp32/lab', 'esp32/alerts'],
-    ssid: 'TinyIDS-Lab',
-    max_packet_size: 2048,
-    rssi_threshold: -70,
-    enabled: true,
-  },
-  102: {
-    rate_limit_ppm: 20,
-    mac_address: 'AA:BB:CC:DD:EE:BB',
-    mqtt_topics: ['warehouse/packets'],
-    ssid: 'TinyIDS-Warehouse',
-    max_packet_size: 1024,
-    rssi_threshold: -75,
-    enabled: false,
-  },
-  fallback: {
-    rate_limit_ppm: 30,
-    mac_address: 'AA:BB:CC:DD:EE:FF',
-    mqtt_topics: ['esp32/sensor', 'esp32/alerts'],
-    ssid: 'TinyIDS-Network',
-    max_packet_size: 2048,
-    rssi_threshold: -72,
-    enabled: true,
-  },
-}
-
-const ActiveToggle = ({ value = false, onToggle, disabled = false }) => {
-  const handleClick = () => {
-    if (disabled) return
-    onToggle?.(!value)
-  }
-
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={value}
-      aria-label="Toggle rule activation"
-      onClick={handleClick}
-      disabled={disabled}
-      className={`relative inline-flex h-8 w-16 items-center rounded-full border-2 transition-colors duration-200 ${
-        value
-          ? 'border-emerald-500 bg-emerald-500 shadow-[0_4px_12px_rgba(16,185,129,0.45)]'
-          : 'border-slate-200 bg-slate-200'
-      } ${disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
-    >
-      <span
-        className={`ml-1 inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform duration-200 ${
-          value ? 'translate-x-7' : 'translate-x-0'
-        }`}
-      />
-    </button>
-  )
-}
 
 const RuleManagementPage = () => {
   const [devices, setDevices] = useState([])
@@ -95,49 +137,10 @@ const RuleManagementPage = () => {
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [ruleValues, setRuleValues] = useState(defaultRuleState)
   const [ruleErrors, setRuleErrors] = useState({})
-  const [loadingRules, setLoadingRules] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [ruleStates, setRuleStates] = useState({})
-  const [ruleStatesLoading, setRuleStatesLoading] = useState(false)
-  const [togglingRuleId, setTogglingRuleId] = useState(null)
-
-  const mapRuleStates = (entries) =>
-    setRuleStates((prev) => {
-      const next = { ...prev }
-      entries.forEach(([id, rule]) => {
-        if (id != null && rule) {
-          next[id] = rule
-        }
-      })
-      return next
-    })
-
-  const loadRuleStates = useCallback(
-    async (deviceList) => {
-      if (!deviceList?.length) return
-      setRuleStatesLoading(true)
-      try {
-        const entries = await Promise.all(
-          deviceList.map(async (device) => {
-            if (!device?.id) return null
-
-            const sampleRule = sampleRules[device.id] ?? sampleRules.fallback
-
-            try {
-              const { data } = await api.get(`/api/device-rules/${device.id}`)
-              return [device.id, { ...data, _sample: false }]
-            } catch (err) {
-              return [device.id, { ...sampleRule, _sample: true }]
-            }
-          }),
-        )
-
-        mapRuleStates(entries.filter(Boolean))
-      } finally {
-        setRuleStatesLoading(false)
-      }
-    },
-    [],
+  const [loadingRules, setLoadingRules] = useState(false)
+  const [expanded, setExpanded] = useState(() =>
+    ruleSections.reduce((acc, section, idx) => ({ ...acc, [section.id]: idx === 0 }), {})
   )
 
   const loadDevices = useCallback(async () => {
@@ -145,60 +148,33 @@ const RuleManagementPage = () => {
     setDevicesError('')
     try {
       const { data } = await api.get('/api/devices')
-      const list = Array.isArray(data) && data.length > 0 ? data : sampleDevices
+      const list = Array.isArray(data) ? data : []
       setDevices(list)
-      loadRuleStates(list)
     } catch (err) {
       const message =
-        err?.response?.data?.message ?? err?.message ?? 'Unable to load devices. Showing sample data.'
+        err?.response?.data?.message ?? err?.message ?? 'Unable to load devices. Please try again.'
       setDevicesError(message)
-      setDevices(sampleDevices)
-      loadRuleStates(sampleDevices)
-      toast(message, { icon: 'ℹ️' })
+      toast.error(message)
     } finally {
       setLoadingDevices(false)
     }
-  }, [loadRuleStates])
+  }, [])
 
   useEffect(() => {
     loadDevices()
   }, [loadDevices])
 
-  const openDrawer = async (device) => {
+  const openDrawer = (device) => {
     setSelectedDevice(device)
     setRuleErrors({})
     setDrawerOpen(true)
     setLoadingRules(true)
-    try {
-      const { data } = await api.get(`/api/device-rules/${device.id}`)
-      mapRuleStates([[device.id, { ...data, _sample: false }]])
-      setRuleValues({
-        rate_limit_ppm: data?.rate_limit_ppm ?? '',
-        mac_address: data?.mac_address ?? '',
-        mqtt_topics: (data?.mqtt_topics ?? []).join(', '),
-        ssid: data?.ssid ?? '',
-        max_packet_size: data?.max_packet_size ?? '',
-        rssi_threshold: data?.rssi_threshold ?? '',
-        enabled: Boolean(data?.enabled),
-      })
-    } catch (err) {
-      const message =
-        err?.response?.data?.message ?? err?.message ?? 'Unable to load rules for this device. Showing sample data.'
-      const sample = sampleRules[device.id] ?? sampleRules.fallback
-      mapRuleStates([[device.id, { ...sample, _sample: true }]])
-      setRuleValues({
-        rate_limit_ppm: sample.rate_limit_ppm,
-        mac_address: sample.mac_address,
-        mqtt_topics: sample.mqtt_topics.join(', '),
-        ssid: sample.ssid,
-        max_packet_size: sample.max_packet_size,
-        rssi_threshold: sample.rssi_threshold,
-        enabled: sample.enabled,
-      })
-      toast(message, { icon: 'ℹ️' })
-    } finally {
-      setLoadingRules(false)
-    }
+    // Pre-fill token from device
+    setRuleValues((prev) => ({
+      ...defaultRuleState,
+      token: device?.token ?? '',
+    }))
+    setLoadingRules(false)
   }
 
   const closeDrawer = () => {
@@ -208,74 +184,24 @@ const RuleManagementPage = () => {
     setRuleErrors({})
   }
 
-  const validate = () => {
-    const errors = {}
-    if (!ruleValues.mac_address.trim()) {
-      errors.mac_address = 'MAC address is required'
-    }
-    const rate = Number(ruleValues.rate_limit_ppm)
-    if (!rate || rate <= 0) {
-      errors.rate_limit_ppm = 'Rate limit must be greater than 0'
-    }
-    const maxPacket = Number(ruleValues.max_packet_size)
-    if (!maxPacket || maxPacket <= 0) {
-      errors.max_packet_size = 'Max packet size must be greater than 0'
-    }
-    return errors
-  }
-
   const handleChange = (field, value) => {
     setRuleValues((prev) => ({ ...prev, [field]: value }))
     setRuleErrors((prev) => ({ ...prev, [field]: undefined }))
   }
 
-  const handleToggleRuleEnabled = async (device) => {
-    if (!device?.id) return
-    const rule = ruleStates[device.id]
-    if (!rule) {
-      await loadRuleStates([device])
-      return
-    }
-
-    const hasRequired = rule.mac_address && rule.rate_limit_ppm && rule.max_packet_size
-    if (!hasRequired) {
-      toast.error('Please configure the rule before toggling Active.')
-      return
-    }
-
-    const nextEnabled = !rule.enabled
-    const optimisticRule = { ...rule, enabled: nextEnabled }
-    mapRuleStates([[device.id, optimisticRule]])
-
-    if (rule._sample) {
-      toast.success(`Rule ${nextEnabled ? 'activated' : 'Unactivated'} `)
-      return
-    }
-
-    setTogglingRuleId(device.id)
-    const payload = {
-      rate_limit_ppm: Number(rule.rate_limit_ppm) || 1,
-      mac_address: rule.mac_address || '',
-      mqtt_topics: Array.isArray(rule.mqtt_topics) ? rule.mqtt_topics : [],
-      ssid: rule.ssid || '',
-      max_packet_size: Number(rule.max_packet_size) || 1,
-      rssi_threshold:
-        rule.rssi_threshold === null || rule.rssi_threshold === '' ? null : Number(rule.rssi_threshold),
-      enabled: nextEnabled,
-    }
-
-    try {
-      const { data } = await api.put(`/api/device-rules/${device.id}`, payload)
-      mapRuleStates([[device.id, { ...data, _sample: false }]])
-      toast.success(`Rule ${nextEnabled ? 'activated' : 'Unactivated'}`)
-    } catch (err) {
-      mapRuleStates([[device.id, rule]])
-      const message = err?.response?.data?.message ?? err?.message ?? 'Unable to update rule status'
-      toast.error(message)
-    } finally {
-      setTogglingRuleId(null)
-    }
+  const validate = () => {
+    const errors = {}
+    if (!ruleValues.token.trim()) errors.token = 'Token is required'
+    if (!Number(ruleValues.cfg_rate_limit_count)) errors.cfg_rate_limit_count = 'Required'
+    if (!Number(ruleValues.cfg_rate_limit_seconds)) errors.cfg_rate_limit_seconds = 'Required'
+    return errors
   }
+
+  const toArray = (text) =>
+    text
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
 
   const handleSave = async () => {
     const errors = validate()
@@ -283,38 +209,67 @@ const RuleManagementPage = () => {
       setRuleErrors(errors)
       return
     }
-
     if (!selectedDevice) return
 
     const payload = {
-      rate_limit_ppm: Number(ruleValues.rate_limit_ppm),
-      mac_address: ruleValues.mac_address.trim(),
-      mqtt_topics: ruleValues.mqtt_topics
-        .split(',')
-        .map((topic) => topic.trim())
-        .filter(Boolean),
-      ssid: ruleValues.ssid.trim(),
-      max_packet_size: Number(ruleValues.max_packet_size),
-      rssi_threshold: ruleValues.rssi_threshold === '' ? null : Number(ruleValues.rssi_threshold),
-      enabled: Boolean(ruleValues.enabled),
+      token: ruleValues.token.trim(),
+      CFG_RATE_LIMIT_COUNT: Number(ruleValues.cfg_rate_limit_count),
+      CFG_RATE_LIMIT_SECONDS: Number(ruleValues.cfg_rate_limit_seconds),
+      CFG_OVERSIZED_THRESHOLD:
+        ruleValues.cfg_oversized_threshold === '' ? undefined : Number(ruleValues.cfg_oversized_threshold),
+      CFG_HTTP_URL_MAX_LEN:
+        ruleValues.cfg_http_url_max_len === '' ? undefined : Number(ruleValues.cfg_http_url_max_len),
+      CFG_RSSI_DIFF_THRESHOLD:
+        ruleValues.cfg_rssi_diff_threshold === '' ? undefined : Number(ruleValues.cfg_rssi_diff_threshold),
+      CFG_SYN_FLOOD_THRESHOLD:
+        ruleValues.cfg_syn_flood_threshold === '' ? undefined : Number(ruleValues.cfg_syn_flood_threshold),
+      CFG_SYN_FLOOD_SECONDS:
+        ruleValues.cfg_syn_flood_seconds === '' ? undefined : Number(ruleValues.cfg_syn_flood_seconds),
+      CFG_SYN_TIMEOUT: ruleValues.cfg_syn_timeout === '' ? undefined : Number(ruleValues.cfg_syn_timeout),
+      CFG_HTTP_BF_THRESHOLD:
+        ruleValues.cfg_http_bf_threshold === '' ? undefined : Number(ruleValues.cfg_http_bf_threshold),
+      CFG_HTTP_BF_WINDOW:
+        ruleValues.cfg_http_bf_window === '' ? undefined : Number(ruleValues.cfg_http_bf_window),
+      CFG_HTTP_BF_BLOCK_TIME:
+        ruleValues.cfg_http_bf_block_time === '' ? undefined : Number(ruleValues.cfg_http_bf_block_time),
+      CFG_DEAUTH_COOLDOWN_MS:
+        ruleValues.cfg_deauth_cooldown_ms === '' ? undefined : Number(ruleValues.cfg_deauth_cooldown_ms),
+      g_trusted_channel: toArray(ruleValues.g_trusted_channel).map((x) => Number(x)).filter((x) => !Number.isNaN(x)),
+      g_target_trusted_mac: toArray(ruleValues.g_target_trusted_mac),
+      g_mqtt_whitelist: toArray(ruleValues.g_mqtt_whitelist),
+      blocked_ips: toArray(ruleValues.blocked_ips),
     }
 
     setSaving(true)
     try {
-      const { data } = await api.put(`/api/device-rules/${selectedDevice.id}`, payload)
-      const updatedRule = data?.rate_limit_ppm ? data : payload
-      mapRuleStates([[selectedDevice.id, { ...updatedRule, _sample: false }]])
-      toast.success('Rules updated successfully')
-      closeDrawer()
+      await api.post(`/api/devices/${selectedDevice.id}/publish`, {
+        topic_base: 'esp/setting/Control',
+        payload,
+        append_token: true,
+      })
+      toast.success('Settings sent to device')
     } catch (err) {
-      const message = err?.response?.data?.message ?? err?.message ?? 'Unable to save rules'
+      const message = err?.response?.data?.message ?? err?.message ?? 'Unable to send settings'
       toast.error(message)
     } finally {
       setSaving(false)
     }
   }
 
-  const drawerTitle = selectedDevice ? `ESP Setting Rules – ${selectedDevice.name}` : 'ESP Setting Rules'
+  const handleLoadFromDevice = async () => {
+    if (!selectedDevice) return
+    try {
+      await api.post(`/api/devices/${selectedDevice.id}/publish`, {
+        topic_base: 'esp/setting/Control',
+        message: 'showsetting',
+        append_token: true,
+      })
+      toast.success('Requested settings (showsetting)')
+    } catch (err) {
+      const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request settings'
+      toast.error(message)
+    }
+  }
 
   const renderStatus = (device) => {
     const online = (device.status ?? '').toLowerCase() === 'online'
@@ -331,23 +286,45 @@ const RuleManagementPage = () => {
 
   const deviceRows = useMemo(() => devices, [devices])
 
+  const toggleSection = (id) => {
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const renderField = (field) => {
+    const inputType = field.type === 'number' ? 'number' : 'text'
+    return (
+      <div key={field.key} className={field.fullWidth ? 'sm:col-span-2' : ''}>
+        <label className="text-sm font-semibold text-slate-700">{field.label}</label>
+        <p className="text-xs text-slate-500">{field.helper}</p>
+        <input
+          type={inputType}
+          value={ruleValues[field.key]}
+          onChange={(e) => handleChange(field.key, e.target.value)}
+          className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          placeholder={field.placeholder}
+        />
+        {ruleErrors[field.key] && <p className="mt-1 text-xs text-rose-500">{ruleErrors[field.key]}</p>}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 bg-gray-50 px-4 pb-12 text-slate-900 sm:px-6">
       <header className="flex flex-col gap-2 rounded-3xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-6 text-white shadow-sm">
         <h1 className="text-3xl font-semibold">Rule Management</h1>
-        <p className="text-sm text-white/80">Configure per-device detection rules across your TinyIDS fleet.</p>
+        <p className="text-sm text-white/80">Configure per-device settings via MQTT with tokenized topics.</p>
       </header>
 
       <section className="rounded-xl bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Devices</h2>
-            <p className="text-sm text-slate-500">Select a device to manage its rule configuration.</p>
+            <p className="text-sm text-slate-500">Select a device to view and configure its settings.</p>
           </div>
         </div>
 
         {loadingDevices ? (
-          <Spinner label="Loading devices…" />
+          <Spinner label="Loading devices..." />
         ) : devicesError ? (
           <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-600">
             <p>{devicesError}</p>
@@ -368,15 +345,16 @@ const RuleManagementPage = () => {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">IP Address</th>
                   <th className="px-4 py-3 text-right">Setting</th>
-                  <th className="px-4 py-3 text-right">Active</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {deviceRows.map((device) => (
                   <tr key={device.id} className="hover:bg-slate-50/70">
-                    <td className="px-4 py-3 font-medium text-slate-900">{device.name}</td>
+                    <td className="px-4 py-3 font-medium text-slate-900">
+                      {device.device_name ?? device.name ?? `Device ${device.id}`}
+                    </td>
                     <td className="px-4 py-3">{renderStatus(device)}</td>
-                    <td className="px-4 py-3 text-slate-600">{device.ip_address ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-600">{device.ip_address ?? '--'}</td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
@@ -384,35 +362,15 @@ const RuleManagementPage = () => {
                         className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-sky-600 hover:to-blue-600"
                       >
                         <Settings className="h-4 w-4" />
-                        Configure
+                        View / Configure
                       </button>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end">
-                        {/*
-                          Show Active toggle inline like ESP Config so users can see rule status at a glance.
-                          Disabled while loading state or when we lack rule data.
-                        */}
-                        {(() => {
-                          const ruleState = ruleStates[device.id]
-                          return (
-                            <ActiveToggle
-                              value={Boolean(ruleState?.enabled)}
-                              onToggle={() => handleToggleRuleEnabled(device)}
-                              disabled={
-                                togglingRuleId === device.id || ruleStatesLoading || !ruleState
-                              }
-                            />
-                          )
-                        })()}
-                      </div>
                     </td>
                   </tr>
                 ))}
                 {!deviceRows.length && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
-                      No devices available for rule configuration.
+                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">
+                      No devices available for configuration.
                     </td>
                   </tr>
                 )}
@@ -425,11 +383,13 @@ const RuleManagementPage = () => {
       {drawerOpen && (
         <div className="fixed inset-0 z-40 flex">
           <div className="hidden flex-1 bg-slate-900/40 backdrop-blur-sm sm:block" onClick={closeDrawer} />
-          <div className="w-full max-w-xl bg-white shadow-2xl">
+          <div className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <div>
-                <p className="text-xs uppercase tracking-wide text-slate-400">Rules Editor</p>
-                <h3 className="text-lg font-semibold text-slate-900">{drawerTitle}</h3>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Settings Editor</p>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  {selectedDevice?.device_name ?? selectedDevice?.name ?? 'Device'}
+                </h3>
               </div>
               <button
                 type="button"
@@ -437,107 +397,77 @@ const RuleManagementPage = () => {
                 className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
                 aria-label="Close"
               >
-                <X className="h-5 w-5" />
+                <span className="block px-1 text-lg leading-none">×</span>
               </button>
             </div>
 
-            <div className="px-6 py-6">
+            <div className="flex-1 overflow-y-auto px-6 py-6">
               {loadingRules ? (
-                <Spinner label="Loading rule settings…" />
+                <Spinner label="Loading settings..." />
               ) : (
                 <div className="space-y-5">
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700">Rate Limit (packets per minute)</label>
-                    <input
-                      type="number"
-                      value={ruleValues.rate_limit_ppm}
-                      onChange={(e) => handleChange('rate_limit_ppm', e.target.value)}
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                    />
-                    <p className="mt-1 text-xs text-slate-500">Maximum packets allowed per minute.</p>
-                    {ruleErrors.rate_limit_ppm && (
-                      <p className="mt-1 text-xs text-rose-500">{ruleErrors.rate_limit_ppm}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700">MAC Address</label>
-                    <input
-                      type="text"
-                      value={ruleValues.mac_address}
-                      onChange={(e) => handleChange('mac_address', e.target.value)}
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                    />
-                    <p className="mt-1 text-xs text-slate-500">Hardware identifier of the device.</p>
-                    {ruleErrors.mac_address && (
-                      <p className="mt-1 text-xs text-rose-500">{ruleErrors.mac_address}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700">MQTT Topics</label>
-                    <textarea
-                      rows={3}
-                      value={ruleValues.mqtt_topics}
-                      onChange={(e) => handleChange('mqtt_topics', e.target.value)}
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                      placeholder="esp32/sensor, esp32/alerts"
-                    />
-                    <p className="mt-1 text-xs text-slate-500">Separate multiple topics with commas.</p>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-semibold text-slate-700">SSID</label>
-                    <input
-                      type="text"
-                      value={ruleValues.ssid}
-                      onChange={(e) => handleChange('ssid', e.target.value)}
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                    />
-                  </div>
-
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="text-sm font-semibold text-slate-700">Max Packet Size (bytes)</label>
+                      <label className="text-sm font-semibold text-slate-700">Token (auto from registration)</label>
                       <input
-                        type="number"
-                        value={ruleValues.max_packet_size}
-                        onChange={(e) => handleChange('max_packet_size', e.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        type="text"
+                        value={ruleValues.token}
+                        readOnly
+                        className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                        placeholder="Auto-filled from device registration"
                       />
-                      {ruleErrors.max_packet_size && (
-                        <p className="mt-1 text-xs text-rose-500">{ruleErrors.max_packet_size}</p>
-                      )}
+                      <p className="mt-1 text-xs text-slate-500">Token is stored when the board registers.</p>
+                      {ruleErrors.token && <p className="mt-1 text-xs text-rose-500">{ruleErrors.token}</p>}
                     </div>
-                    <div>
-                      <label className="text-sm font-semibold text-slate-700">RSSI Threshold (dBm)</label>
-                      <input
-                        type="number"
-                        value={ruleValues.rssi_threshold}
-                        onChange={(e) => handleChange('rssi_threshold', e.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                        placeholder="-70"
-                      />
+                    <div className="flex items-end justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-sky-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-70"
+                        aria-label="Send settings to device"
+                      >
+                        {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                        Send to Device
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLoadFromDevice}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                        aria-label="Load settings from device"
+                      >
+                        Load from Device
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={closeDrawer}
-                      className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSave}
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-500 to-blue-500 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-sky-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-70"
-                    >
-                      {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                      Save
-                    </button>
+                  <div className="space-y-4">
+                    {ruleSections.map((section) => (
+                      <div key={section.id} className="rounded-xl border border-slate-200 bg-slate-50/60">
+                        <div className="flex items-start justify-between gap-4 px-4 py-3">
+                          <div>
+                            <h3 className="text-base font-semibold text-slate-900">{section.title}</h3>
+                            <p className="text-xs font-semibold text-indigo-600">{section.subtitle}</p>
+                            <p className="mt-1 text-sm text-slate-600">{section.description}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleSection(section.id)}
+                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-white"
+                          >
+                            <Settings className="h-4 w-4" />
+                            {expanded[section.id] ? 'Hide' : 'Configure'}
+                          </button>
+                        </div>
+                        {expanded[section.id] && (
+                          <div className="border-t border-slate-200 bg-white px-4 py-4">
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                              {section.fields.map((field) => renderField(field))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

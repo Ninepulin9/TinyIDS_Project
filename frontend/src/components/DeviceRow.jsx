@@ -1,6 +1,5 @@
 import dayjs from 'dayjs'
 import Badge from './ui/Badge.jsx'
-import Button from './ui/Button.jsx'
 import Toggle from './ui/Toggle.jsx'
 
 const statusVariant = (status) => {
@@ -26,15 +25,11 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, toggling = 
         <div className="font-medium text-slate-700">{device.ip_address ?? '--'}</div>
         {device.mac_address && <p className="text-xs text-slate-400">MAC {device.mac_address}</p>}
       </td>
-      <td className="px-4 py-4 align-middle">
-        <Button variant="outline" size="sm" onClick={() => onEditWifi?.(device)}>
-          Edit
-        </Button>
+      <td className="px-4 py-4 align-middle hidden">
+        <span className="text-xs text-slate-400">Coming soon</span>
       </td>
-      <td className="px-4 py-4 align-middle">
-        <Button variant="outline" size="sm" onClick={() => onEditMqtt?.(device)}>
-          Edit
-        </Button>
+      <td className="px-4 py-4 align-middle hidden">
+        <span className="text-xs text-slate-400">Coming soon</span>
       </td>
       <td className="px-4 py-4 align-middle">
         <Toggle

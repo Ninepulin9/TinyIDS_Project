@@ -53,6 +53,7 @@ class Device(db.Model, TimestampMixin):
     network_profile = db.relationship(
         "DeviceNetworkProfile", backref="device", uselist=False, cascade="all, delete-orphan"
     )
+    token = db.relationship("DeviceToken", backref="device", uselist=False, cascade="all, delete-orphan")
 
 
 class Rule(db.Model, TimestampMixin):
@@ -127,6 +128,14 @@ class DeviceNetworkProfile(db.Model, TimestampMixin):
         if self.mqtt_broker_port is None:
             self.mqtt_broker_port = 1883
         return self
+
+
+class DeviceToken(db.Model, TimestampMixin):
+    __tablename__ = "device_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id"), unique=True, nullable=False)
+    token = db.Column(db.String(255), nullable=False)
 
 
 DEFAULT_DASHBOARD_WIDGETS = {
@@ -217,6 +226,7 @@ __all__ = [
     "Blacklist",
     "SystemSettings",
     "DeviceNetworkProfile",
+    "DeviceToken",
     "DashboardSettings",
     "DeviceRule",
     "DEFAULT_DASHBOARD_WIDGETS",

@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from http import HTTPStatus
 
 from flask import Blueprint, jsonify, request
@@ -6,7 +7,8 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from models import Device, DeviceNetworkProfile
+from models import Device, DeviceNetworkProfile, DeviceToken
+from services.mqtt_service import mqtt_service
 
 
 devices_bp = Blueprint("devices", __name__, url_prefix="/devices")
@@ -60,6 +62,7 @@ def _serialize_device(device: Device) -> dict:
         "use_tls": bool(profile.mqtt_use_tls),
         "last_result": profile.mqtt_last_result,
     }
+    token_value = device.token.token if device.token else None
 
     return {
         "id": device.id,
@@ -73,6 +76,7 @@ def _serialize_device(device: Device) -> dict:
         "active": bool(device.is_active),
         "wifi": wifi,
         "mqtt": mqtt,
+        "token": token_value,
     }
 
 
@@ -96,6 +100,7 @@ def register_device():
     payload = request.get_json(force=True) or {}
     name = (payload.get("name") or "").strip()
     esp_id = (payload.get("esp_id") or "").strip()
+    token_value = (payload.get("token") or "").strip()
     if not name or not esp_id:
         return jsonify({"message": "name and esp_id are required"}), HTTPStatus.BAD_REQUEST
 
@@ -109,6 +114,11 @@ def register_device():
     )
     db.session.add(device)
     db.session.flush()
+
+    if token_value:
+        device_token = DeviceToken(device_id=device.id, token=token_value)
+        db.session.add(device_token)
+        db.session.flush()
 
     profile = _ensure_profile(device, persist=True)
 
@@ -199,6 +209,62 @@ def update_mqtt(device_id: int):
 
     db.session.commit()
     return jsonify(_serialize_device(device))
+
+
+@devices_bp.route("/<int:device_id>/token", methods=["PUT"])
+@jwt_required()
+def upsert_token(device_id: int):
+    device = _get_device_or_404(device_id)
+    payload = request.get_json(force=True) or {}
+    token_value = (payload.get("token") or "").strip()
+    if not token_value:
+        return jsonify({"message": "token is required"}), HTTPStatus.BAD_REQUEST
+
+    if device.token:
+        device.token.token = token_value
+    else:
+        db.session.add(DeviceToken(device_id=device.id, token=token_value))
+    db.session.commit()
+    return jsonify({"id": device.id, "token": token_value})
+
+
+@devices_bp.route("/<int:device_id>/publish", methods=["POST"])
+@jwt_required()
+def publish_to_device(device_id: int):
+    device = _get_device_or_404(device_id)
+    if not mqtt_service.client:
+        return jsonify({"message": "MQTT client not connected"}), HTTPStatus.SERVICE_UNAVAILABLE
+
+    payload = request.get_json(force=True) or {}
+    topic_base = (payload.get("topic_base") or "esp/setting/Control").strip()
+    message = payload.get("message")
+    json_payload = payload.get("payload")
+    append_token = payload.get("append_token", True)
+    token_value = device.token.token if device.token else None
+
+    if append_token:
+        if not token_value:
+            return jsonify({"message": "token not set for this device"}), HTTPStatus.BAD_REQUEST
+        topic = f"{topic_base}-{token_value}"
+    else:
+        topic = topic_base
+
+    if message is not None and isinstance(message, (dict, list)):
+        # if user accidentally sends JSON in message, convert to string to preserve intention
+        message = json.dumps(message)
+
+    if json_payload is not None:
+        try:
+            payload_text = json.dumps(json_payload)
+        except Exception:
+            return jsonify({"message": "payload must be JSON-serializable"}), HTTPStatus.BAD_REQUEST
+    else:
+        if message is None:
+            message = "showsetting"
+        payload_text = str(message)
+
+    mqtt_service.client.publish(topic, payload_text, qos=0, retain=False)
+    return jsonify({"status": "sent", "topic": topic, "payload": payload_text})
 
 
 @devices_bp.route("/<int:device_id>/mqtt/test", methods=["POST"])

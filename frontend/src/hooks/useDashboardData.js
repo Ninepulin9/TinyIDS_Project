@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../lib/api'
 
 export const DASHBOARD_TIMEFRAMES = ['seconds', 'minutes', 'hours', 'days', 'months']
-const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000
+const AUTO_REFRESH_INTERVAL_MS = 4 * 1000
 
 const createEmptyTrends = () => ({
   seconds: [],

@@ -1,11 +1,13 @@
 import json
 import threading
+from datetime import datetime
 from typing import Optional
 
 import paho.mqtt.client as mqtt
+from sqlalchemy import func
 
 from extensions import db, socketio
-from models import Device, Log, User
+from models import Device, DeviceNetworkProfile, DeviceToken, Log, User
 
 
 class MQTTService:
@@ -14,6 +16,8 @@ class MQTTService:
     def __init__(self) -> None:
         self.client: Optional[mqtt.Client] = None
         self.app = None
+        self.topics: list[str] = []
+        self.fallback_topics: set[str] = set()
 
     def init_app(self, app) -> None:
         self.app = app
@@ -31,9 +35,16 @@ class MQTTService:
         if app.config.get("MQTT_TLS_ENABLED"):
             ca = app.config.get("MQTT_TLS_CA_CERTS")
             self.client.tls_set(ca_certs=ca)
+            self.client.tls_insecure_set(bool(app.config.get("MQTT_TLS_INSECURE")))
 
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
+        self.topics = self._resolve_topics()
+        self.fallback_topics = {
+            topic.lower()
+            for topic in self.topics
+            if topic.lower() not in {"esp/alert", "esp/setting/now", "esp/alive"}
+        }
 
         def _runner():
             try:
@@ -48,57 +59,307 @@ class MQTTService:
 
         threading.Thread(target=_runner, daemon=True).start()
 
+    def _resolve_topics(self) -> list[str]:
+        raw_topics = self.app.config.get("MQTT_TOPICS") if self.app else None
+        topics = self._normalize_topics(raw_topics)
+        if not topics:
+            mqtt_topic = self.app.config.get("MQTT_TOPIC") if self.app else None
+            if mqtt_topic and mqtt_topic != "tinyids/logs":
+                topics = self._normalize_topics(mqtt_topic)
+        if not topics:
+            topics = [
+                "esp/alert",
+                "esp/setting/now",
+                "esp/setting/control",
+                "esp/alive",
+                "esp/entrance",
+                "esp/esp/entrance",
+            ]
+        normalized = {topic.lower() for topic in topics if topic}
+        if normalized and normalized.issubset({"esp/alert", "esp/setting/now", "esp/alive"}):
+            return ["esp/#"]
+        return topics
+
+    def _normalize_topics(self, value) -> list[str]:
+        if not value:
+            return []
+        if isinstance(value, str):
+            return [topic.strip() for topic in value.split(",") if topic.strip()]
+        if isinstance(value, (list, tuple, set)):
+            return [str(topic).strip() for topic in value if str(topic).strip()]
+        return []
+
     def _on_connect(self, client, userdata, flags, reason_code):  # noqa: D401
-        topic = self.app.config.get("MQTT_TOPIC")
         if reason_code == 0:
-            client.subscribe(topic)
-            self.app.logger.info("Connected to MQTT. Listening on %s", topic)
+            for topic in self.topics:
+                client.subscribe(topic)
+            self.app.logger.info("Connected to MQTT. Listening on %s", ", ".join(self.topics))
         else:
             self.app.logger.error("MQTT connection failed: code=%s", reason_code)
 
     def _on_message(self, client, userdata, msg):
         if not self.app:
             return
+        topic = (msg.topic or "").strip()
+        topic_key = topic.lower()
+        raw_payload = msg.payload.decode("utf-8", errors="replace")
         try:
-            payload = json.loads(msg.payload.decode("utf-8"))
+            payload = json.loads(raw_payload)
         except json.JSONDecodeError:
-            self.app.logger.warning("Invalid MQTT payload: %s", msg.payload)
+            if topic_key == "esp/alive/check":
+                return
+            self.app.logger.warning("Invalid MQTT payload on %s: %s", topic, raw_payload)
             return
+        if not isinstance(payload, dict):
+            payload = {"message": payload}
 
         with self.app.app_context():
-            device = None
-            esp_id = payload.get("device_id")
-            if esp_id:
-                device = Device.query.filter_by(esp_id=esp_id).first()
-            if not device:
-                owner = User.query.first()
-                owner_id = owner.id if owner else 1
-                device = Device(
-                    user_id=owner_id,
-                    name=payload.get("device_name", "ESP32"),
-                    esp_id=esp_id or "unknown",
-                )
-                db.session.add(device)
+            if topic_key == "esp/alert":
+                self._handle_alert(payload, topic)
+            elif topic_key in {"esp/setting/now", "esp/setting/control"}:
+                self._handle_settings(payload, topic)
+            elif topic_key == "esp/alive":
+                self._handle_alive(payload)
+            elif topic_key in self.fallback_topics:
+                self._handle_generic_log(payload, topic)
 
-            log = Log(
-                user_id=device.user_id,
-                device=device,
-                payload=payload,
-                severity=payload.get("severity", "info"),
-                source_ip=payload.get("source_ip"),
-                destination_ip=payload.get("destination_ip"),
+    def _handle_alert(self, payload: dict, topic: str) -> None:
+        device = self._resolve_device(payload)
+        if not device:
+            return
+        self._touch_device(device, payload, mark_active=True)
+        enriched = self._enrich_payload(payload, topic, default_type="System Alert")
+        if "description" not in enriched and "alert_msg" in enriched:
+            enriched["description"] = enriched.get("alert_msg")
+        severity = payload.get("severity") or payload.get("level") or payload.get("priority") or "high"
+        event_time = self._parse_timestamp(payload)
+        log = Log(
+            user_id=device.user_id,
+            device=device,
+            payload=enriched,
+            severity=severity,
+            source_ip=self._derive_ip(payload, "source"),
+            destination_ip=self._derive_ip(payload, "destination"),
+        )
+        if event_time:
+            log.created_at = event_time
+        db.session.add(log)
+        db.session.commit()
+        self._emit_log(log, device)
+
+    def _handle_settings(self, payload: dict, topic: str) -> None:
+        device = self._resolve_device(payload)
+        if not device:
+            return
+        self._touch_device(device, payload, mark_active=True)
+        enriched = self._enrich_payload(payload, topic, default_type="ESP Settings")
+        enriched.setdefault("description", "Current configuration snapshot reported by ESP.")
+        log = Log(
+            user_id=device.user_id,
+            device=device,
+            payload=enriched,
+            severity=payload.get("severity") or "info",
+            source_ip=self._derive_ip(payload, "source"),
+            destination_ip=self._derive_ip(payload, "destination"),
+        )
+        db.session.add(log)
+        db.session.commit()
+        self._emit_log(log, device)
+
+    def _handle_alive(self, payload: dict) -> None:
+        device = self._resolve_device(payload)
+        if not device:
+            return
+        status_raw = str(payload.get("status") or payload.get("state") or "").strip().lower()
+        if status_raw in {"offline", "down", "dead", "disconnected"}:
+            device.is_active = False
+        else:
+            device.is_active = True
+        self._touch_device(device, payload, mark_active=None)
+        db.session.commit()
+
+    def _handle_generic_log(self, payload: dict, topic: str) -> None:
+        device = self._resolve_device(payload)
+        if not device:
+            return
+        self._touch_device(device, payload, mark_active=True)
+        enriched = self._enrich_payload(payload, topic)
+        log = Log(
+            user_id=device.user_id,
+            device=device,
+            payload=enriched,
+            severity=payload.get("severity", "info"),
+            source_ip=self._derive_ip(payload, "source"),
+            destination_ip=self._derive_ip(payload, "destination"),
+        )
+        db.session.add(log)
+        db.session.commit()
+        self._emit_log(log, device)
+
+    def _emit_log(self, log: Log, device: Device) -> None:
+        log_data = {
+            "id": log.id,
+            "device": device.name,
+            "severity": log.severity,
+            "payload": log.payload,
+            "created_at": log.created_at.isoformat(),
+        }
+        socketio.emit("log:new", log_data)
+
+    def _resolve_device(self, payload: dict) -> Device | None:
+        owner = User.query.first()
+        owner_id = owner.id if owner else 1
+
+        device = None
+
+        token_value = self._coerce_str(payload.get("token"))
+        if token_value:
+            token_row = DeviceToken.query.filter_by(token=token_value).first()
+            if token_row:
+                device = token_row.device
+
+        esp_id = self._coerce_str(payload.get("esp_id") or payload.get("espId") or payload.get("espID"))
+        if esp_id:
+            device = Device.query.filter_by(esp_id=esp_id).first()
+
+        device_id_value = payload.get("device_id") or payload.get("deviceId")
+        if not device:
+            device_id = self._coerce_int(device_id_value)
+            if device_id is not None:
+                device = Device.query.filter_by(id=device_id, user_id=owner_id).first()
+
+        if not device and device_id_value is not None and not esp_id:
+            esp_candidate = self._coerce_str(device_id_value)
+            if esp_candidate:
+                device = Device.query.filter_by(esp_id=esp_candidate).first()
+
+        mac_address = self._coerce_str(
+            payload.get("mac_address") or payload.get("mac") or payload.get("macAddress")
+        )
+        if not device and mac_address:
+            device = (
+                Device.query.filter(Device.user_id == owner_id)
+                .filter(func.lower(Device.mac_address) == mac_address.lower())
+                .first()
             )
-            db.session.add(log)
-            db.session.commit()
 
-            log_data = {
-                "id": log.id,
-                "device": device.name,
-                "severity": log.severity,
-                "payload": log.payload,
-                "created_at": log.created_at.isoformat(),
-            }
-            socketio.emit("log:new", log_data)
+        ip_address = self._coerce_str(payload.get("ip_address") or payload.get("ip") or payload.get("device_ip"))
+        if not device and ip_address:
+            device = (
+                Device.query.filter(Device.user_id == owner_id)
+                .filter(Device.ip_address == ip_address)
+                .first()
+            )
+
+        device_name = self._coerce_str(payload.get("device_name") or payload.get("deviceName") or payload.get("device"))
+        if not device and device_name:
+            device = (
+                Device.query.filter(Device.user_id == owner_id)
+                .filter(func.lower(Device.name) == device_name.lower())
+                .first()
+            )
+
+        if not device:
+            device = Device.query.filter_by(user_id=owner_id, esp_id="unknown").first()
+
+        if not device:
+            device = Device(
+                user_id=owner_id,
+                name=device_name or "ESP32",
+                esp_id=esp_id or "unknown",
+            )
+            db.session.add(device)
+            db.session.flush()
+
+        return device
+
+    def _touch_device(self, device: Device, payload: dict, mark_active: bool | None) -> None:
+        ip_address = self._coerce_str(payload.get("ip_address") or payload.get("ip") or payload.get("device_ip"))
+        mac_address = self._coerce_str(
+            payload.get("mac_address") or payload.get("mac") or payload.get("macAddress")
+        )
+        device_name = self._coerce_str(payload.get("device_name") or payload.get("deviceName") or payload.get("device"))
+
+        if ip_address:
+            device.ip_address = ip_address
+        if mac_address:
+            device.mac_address = mac_address
+        if device_name and device.name in {"ESP32", "unknown"}:
+            device.name = device_name
+        if mark_active is True:
+            device.is_active = True
+        elif mark_active is False:
+            device.is_active = False
+
+        profile = self._ensure_profile(device)
+        profile.last_seen = self._parse_timestamp(payload) or datetime.utcnow()
+
+    def _ensure_profile(self, device: Device) -> DeviceNetworkProfile:
+        profile = device.network_profile
+        if profile:
+            return profile
+        profile = DeviceNetworkProfile(device_id=device.id, user_id=device.user_id)
+        db.session.add(profile)
+        device.network_profile = profile
+        return profile
+
+    def _parse_timestamp(self, payload: dict) -> datetime | None:
+        for key in ("time", "timestamp", "ts", "reported_at"):
+            value = payload.get(key)
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, (int, float)):
+                try:
+                    return datetime.utcfromtimestamp(value)
+                except (OverflowError, OSError, ValueError):
+                    continue
+            if isinstance(value, str):
+                cleaned = value.strip()
+                if not cleaned:
+                    continue
+                cleaned = cleaned.replace("Z", "+00:00")
+                try:
+                    return datetime.fromisoformat(cleaned)
+                except ValueError:
+                    continue
+        return None
+
+    def _coerce_str(self, value) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    def _coerce_int(self, value) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _enrich_payload(self, payload: dict, topic: str, default_type: str | None = None) -> dict:
+        enriched = dict(payload or {})
+        enriched.setdefault("_mqtt_topic", topic)
+        if default_type:
+            enriched.setdefault("type", default_type)
+        return enriched
+
+    def _derive_ip(self, payload: dict, prefix: str) -> str | None:
+        keys = [
+            f"{prefix}_ip",
+            f"{prefix}Ip",
+            f"{prefix}_ip_address",
+            f"{prefix} ip",
+            f"{prefix}-ip",
+            f"{prefix} ip address",
+            f"{prefix}-ip-address",
+        ]
+        for key in keys:
+            value = self._coerce_str(payload.get(key))
+            if value:
+                return value
+        return None
 
 
 mqtt_service = MQTTService()

@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Iterable, List
 
 from flask import Flask, jsonify
@@ -118,4 +119,5 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000)
+    debug = os.getenv("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
+    socketio.run(app, host="0.0.0.0", port=5000, debug=debug, use_reloader=False)

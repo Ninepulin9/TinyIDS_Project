@@ -10,13 +10,18 @@ services:
       - JWT_SECRET_KEY=super-secret-jwt
       - SECRET_KEY=super-secret-key
       - MQTT_BROKER_URL=mosquitto
-      - MQTT_TOPIC=tinyids/logs
+      - MQTT_TOPICS=esp/alert,esp/setting/now,esp/alive
+      - MQTT_BROKER_PORT=8883
+      - MQTT_TLS_ENABLED=true
+      - MQTT_TLS_CA_CERTS=/certs/ca.crt
+      - MQTT_TLS_INSECURE=true
       - ALLOWED_ORIGIN=*
       - CORS_ORIGINS=*
     ports:
       - "5000:5000"
     volumes:
       - ./backend:/app
+      - ./mosquitto/certs:/certs:ro
     depends_on:
       db:
         condition: service_healthy
@@ -24,7 +29,7 @@ services:
         condition: service_started
     networks:
       - tinyids_net
-    command: flask run --host=0.0.0.0 --port=5000 --reload
+    command: python app.py
 
   frontend:
     build: ./frontend
@@ -67,9 +72,12 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2.0
     container_name: tinyids-broker
+    user: "0:0"
     ports:
-      - "1883:1883"
+      - "8883:8883"
     volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/certs:/mosquitto/certs
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     networks:

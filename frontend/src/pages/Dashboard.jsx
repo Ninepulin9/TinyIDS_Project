@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Activity, AlertTriangle, BarChart3, CircuitBoard, PackageSearch, RefreshCw, Shield } from 'lucide-react'
+import { Activity, AlertTriangle, CircuitBoard, PackageSearch, Shield } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { useDashboardData, DASHBOARD_TIMEFRAMES } from '../hooks/useDashboardData'
 import api from '../lib/api'
-import Button from '../components/ui/Button.jsx'
+import { getSocket } from '../lib/socket'
 
 const metricCards = [
   {
@@ -63,10 +63,10 @@ const Dashboard = () => {
     setSelectedDeviceId,
     selectedDevice,
     refresh,
-    lastManualRefresh,
   } = useDashboardData()
   const [widgetVisibility, setWidgetVisibility] = useState(defaultWidgetVisibility)
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshTimeoutRef = useRef(null)
+  const lastRealtimeRefreshRef = useRef(0)
 
   const normalizeVisibility = useCallback((payload) => {
     if (!payload || typeof payload !== 'object') return defaultWidgetVisibility
@@ -97,6 +97,35 @@ const Dashboard = () => {
     window.addEventListener('dashboard:settings-updated', handleSettingsUpdated)
     return () => window.removeEventListener('dashboard:settings-updated', handleSettingsUpdated)
   }, [normalizeVisibility])
+
+  useEffect(() => {
+    const socket = getSocket()
+
+    const handleLogNew = () => {
+      const now = Date.now()
+      const elapsed = now - lastRealtimeRefreshRef.current
+      if (elapsed > 1500) {
+        lastRealtimeRefreshRef.current = now
+        refresh().catch(() => {})
+        return
+      }
+      if (refreshTimeoutRef.current) return
+      refreshTimeoutRef.current = setTimeout(() => {
+        refreshTimeoutRef.current = null
+        lastRealtimeRefreshRef.current = Date.now()
+        refresh().catch(() => {})
+      }, Math.max(1500 - elapsed, 0))
+    }
+
+    socket.on('log:new', handleLogNew)
+    return () => {
+      socket.off('log:new', handleLogNew)
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current)
+        refreshTimeoutRef.current = null
+      }
+    }
+  }, [refresh])
 
   const visibleMetricCards = useMemo(
     () => metricCards.filter(({ settingKey }) => widgetVisibility[settingKey] !== false),
@@ -191,27 +220,36 @@ const Dashboard = () => {
               Last updated:{' '}
               <span className="font-semibold">{new Date(metrics?.lastUpdated ?? Date.now()).toLocaleString()}</span>
             </div>
-            <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-white/70">
-              Device Context
-              <select
-                value={selectedDeviceId}
-                onChange={handleDeviceChange}
-                className="rounded-full border border-white/40 bg-white/30 px-4 py-2 text-sm font-medium text-white shadow-sm backdrop-blur transition hover:border-white focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40"
-                style={{
-                  WebkitAppearance: 'none',
-                  MozAppearance: 'none',
-                  appearance: 'none',
-                  backgroundImage:
+              <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-white/70">
+                Device Context
+                <select
+                  value={selectedDeviceId}
+                  onChange={handleDeviceChange}
+                  className="rounded-full border border-white/40 bg-white/30 px-4 py-2 text-sm font-medium text-slate-900 shadow-sm backdrop-blur transition hover:border-white focus:border-white focus:outline-none focus:ring-2 focus:ring-white/40"
+                  style={{
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'none',
+                    appearance: 'none',
+                    backgroundImage:
                     'linear-gradient(45deg, transparent 50%, rgba(255,255,255,0.8) 50%), linear-gradient(135deg, rgba(255,255,255,0.8) 50%, transparent 50%)',
-                  backgroundPosition: 'calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px)',
-                  backgroundSize: '6px 6px, 6px 6px',
-                  backgroundRepeat: 'no-repeat',
-                  paddingRight: '2rem',
-                }}
-              >
-                <option value="all">All Devices</option>
-                {devices.map((device) => (
-                  <option key={device.id} value={String(device.id)}>
+                    backgroundPosition: 'calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px)',
+                    backgroundSize: '6px 6px, 6px 6px',
+                    backgroundRepeat: 'no-repeat',
+                    paddingRight: '2rem',
+                    color: '#0f172a',
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.backgroundColor = '#ffffff';
+                    e.target.style.color = '#0f172a';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.backgroundColor = 'rgba(255,255,255,0.3)';
+                    e.target.style.color = '#0f172a';
+                  }}
+                >
+                  <option value="all">All Devices</option>
+                  {devices.map((device) => (
+                    <option key={device.id} value={String(device.id)}>
                     {device.device_name ?? `Device ${device.id}`}
                     {device.mac_address ? ` (${device.mac_address})` : ''}
                   </option>
@@ -221,32 +259,6 @@ const Dashboard = () => {
           </div>
         </div>
       </header>
-
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          className="border border-slate-200 bg-white text-slate-600 hover:border-indigo-400 hover:bg-indigo-50"
-          disabled={refreshing}
-          onClick={async () => {
-            setRefreshing(true)
-            try {
-              await refresh()
-            } finally {
-              setRefreshing(false)
-            }
-          }}
-        >
-          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Refreshing...' : 'Refresh Dashboard'}
-        </Button>
-          <p className="text-xs text-slate-500">
-            Last manual refresh:{' '}
-            <span className="font-semibold">
-              {lastManualRefresh ? new Date(lastManualRefresh).toLocaleTimeString() : 'Never'}
-            </span>
-          </p>
-        </div>
 
         {error && (
           <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">

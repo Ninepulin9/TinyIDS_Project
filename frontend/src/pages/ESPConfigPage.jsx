@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
@@ -53,6 +53,7 @@ const ESPConfigPage = () => {
   const [selectedWifiDevice, setSelectedWifiDevice] = useState(null)
   const [selectedMqttDevice, setSelectedMqttDevice] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
+  const pingIntervalRef = useRef(null)
 
   const fetchDevices = useCallback(async () => {
     setLoading(true)
@@ -82,6 +83,42 @@ const ESPConfigPage = () => {
   useEffect(() => {
     fetchDevices()
   }, [fetchDevices])
+
+  const pingDevices = useCallback(async () => {
+    const liveDevices = devices.filter((d) => d?.id && !String(d.id).startsWith('sample-') && d.token)
+    if (!liveDevices.length) return
+    try {
+      await Promise.all(
+        liveDevices.map((device) =>
+          api.post(`/api/devices/${device.id}/publish`, {
+            topic_base: 'esp/Alive/Check',
+            message: `Test-${device.token}`,
+            append_token: false,
+          }),
+        ),
+      )
+    } catch (err) {
+      console.warn('Ping devices failed', err)
+    }
+  }, [devices])
+
+  useEffect(() => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current)
+      pingIntervalRef.current = null
+    }
+    if (!devices.length) return undefined
+    pingIntervalRef.current = setInterval(() => {
+      pingDevices()
+      fetchDevices()
+    }, 5000)
+    return () => {
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current)
+        pingIntervalRef.current = null
+      }
+    }
+  }, [devices, pingDevices, fetchDevices])
 
   const filteredDevices = useMemo(() => {
     if (!query.trim()) return devices
@@ -115,19 +152,29 @@ const ESPConfigPage = () => {
       return
     }
 
+    if (!device.token) {
+      toast.error('This device has no token set; cannot send AlertOn/AlertOff.')
+      setTogglingId(null)
+      return
+    }
+
+    const message = nextActive ? `AlertOn-${device.token}` : `AlertOff-${device.token}`
+
     try {
-      const { data } = await api.patch(`/api/devices/${device.id}/active`, { active: nextActive })
-      if (data?.id) {
-        updateDeviceState(data)
-      }
-      toast.success(
-        `${device.device_name} ${nextActive ? 'activated' : 'deactivated'} successfully`,
-      )
+      await api.post(`/api/devices/${device.id}/publish`, {
+        topic_base: 'esp/alive/setting',
+        message,
+        append_token: false,
+      })
+      toast.success(`Sent ${message}`)
+      setTimeout(() => {
+        fetchDevices()
+      }, 1500)
     } catch (err) {
       const message =
         err?.response?.data?.message ??
         err?.message ??
-        'Unable to update device status. Reverting to previous value.'
+        'Unable to send AlertOn/AlertOff. Reverting toggle.'
       setDevices((prev) => prev.map((item) => (item.id === device.id ? { ...item, active: !nextActive } : item)))
       toast.error(message)
     } finally {

@@ -12,7 +12,6 @@ const Settings = () => {
   const [systemSettings, setSystemSettings] = useState({
     log_retention_days: 30,
     attack_notifications: true,
-    cooldown_seconds: 60,
   })
   const [dashboardSettings, setDashboardSettings] = useState({
     timeframe_minutes: 60,
@@ -29,9 +28,10 @@ const Settings = () => {
           api.get('/api/settings/system'),
           api.get('/api/settings/dashboard'),
         ])
+        const { cooldown_seconds: _cooldown, ...systemData } = system?.data ?? {}
         setSystemSettings((prev) => ({
           ...prev,
-          ...(system?.data ?? {}),
+          ...systemData,
         }))
         setDashboardSettings((prev) => ({
           ...prev,
@@ -94,24 +94,13 @@ const Settings = () => {
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md md:p-8">
         <h2 className="text-xl font-semibold text-slate-900">System Settings</h2>
         <form onSubmit={handleSystemSave} className="mt-6 grid gap-6 md:grid-cols-2">
-          <label className="flex flex-col text-sm font-medium text-slate-700">
+          <label className="flex flex-col text-sm font-medium text-slate-700 md:col-span-2">
             Log Retention (days)
             <input
               type="number"
               value={systemSettings.log_retention_days ?? 0}
               onChange={(event) =>
                 setSystemSettings((prev) => ({ ...prev, log_retention_days: Number(event.target.value) }))
-              }
-              className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
-            />
-          </label>
-          <label className="flex flex-col text-sm font-medium text-slate-700">
-            Cooldown (seconds)
-            <input
-              type="number"
-              value={systemSettings.cooldown_seconds ?? 0}
-              onChange={(event) =>
-                setSystemSettings((prev) => ({ ...prev, cooldown_seconds: Number(event.target.value) }))
               }
               className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
             />

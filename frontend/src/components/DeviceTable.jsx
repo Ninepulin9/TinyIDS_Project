@@ -49,8 +49,8 @@ const DeviceTable = ({
               <th className="px-4 py-3">Device Name</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">IP Address</th>
-              <th className="px-4 py-3">Wi-Fi</th>
-              <th className="px-4 py-3">MQTT</th>
+              <th className="px-4 py-3 hidden">Wi-Fi</th>
+              <th className="px-4 py-3 hidden">MQTT</th>
               <th className="px-4 py-3">Active</th>
             </tr>
           </thead>
