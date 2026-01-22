@@ -21,7 +21,7 @@ services:
       - "5000:5000"
     volumes:
       - ./backend:/app
-      - ./mosquitto/certs:/certs:ro
+      - ${CERTS_PATH:-./mosquitto/certs}:/certs:ro
     depends_on:
       db:
         condition: service_healthy
@@ -77,7 +77,7 @@ services:
       - "8883:8883"
     volumes:
       - ./mosquitto/config:/mosquitto/config
-      - ./mosquitto/certs:/mosquitto/certs
+      - ${CERTS_PATH:-./mosquitto/certs}:/mosquitto/certs
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     networks:
