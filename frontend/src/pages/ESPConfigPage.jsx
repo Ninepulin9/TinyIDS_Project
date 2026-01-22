@@ -54,6 +54,7 @@ const ESPConfigPage = () => {
   const [selectedWifiDevice, setSelectedWifiDevice] = useState(null)
   const [selectedMqttDevice, setSelectedMqttDevice] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
+  const [discovering, setDiscovering] = useState(false)
   const pingIntervalRef = useRef(null)
 
   const fetchDevices = useCallback(async () => {
@@ -210,6 +211,22 @@ const ESPConfigPage = () => {
     }
   }
 
+  const handleDiscover = async () => {
+    setDiscovering(true)
+    try {
+      const { data } = await api.post('/api/devices/discover', { nonce_length: 8 })
+      toast.success(`Sent DISCOVER (${data?.nonce ?? 'ok'})`)
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ??
+        err?.message ??
+        'Unable to send DISCOVER. Please try again.'
+      toast.error(message)
+    } finally {
+      setDiscovering(false)
+    }
+  }
+
   return (
     <div className="space-y-6 text-slate-900" style={{ colorScheme: 'light' }}>
       <header className="flex flex-col gap-4 rounded-3xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-6 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between">
@@ -219,6 +236,14 @@ const ESPConfigPage = () => {
             Manage Wi-Fi and MQTT credentials for every TinyIDS ESP32 sensor.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleDiscover}
+          disabled={discovering}
+          className="inline-flex items-center justify-center rounded-full bg-white/15 px-5 py-2 text-sm font-semibold text-white transition hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {discovering ? 'Discovering...' : 'DISCOVER'}
+        </button>
       </header>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md">
