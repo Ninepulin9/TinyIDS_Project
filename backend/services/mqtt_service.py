@@ -22,8 +22,10 @@ class MQTTService:
         self.topics: list[str] = []
         self.fallback_topics: set[str] = set()
         self.discovery_topic = "esp/Entrance"
+        self.discovery_interval = 0
         self.pending_nonces: dict[str, float] = {}
         self.pending_lock = threading.Lock()
+        self.discovery_thread_started = False
 
     def init_app(self, app) -> None:
         self.app = app
@@ -45,6 +47,7 @@ class MQTTService:
 
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
+        self.discovery_interval = int(app.config.get("MQTT_DISCOVERY_INTERVAL", 0) or 0)
         self.topics = self._resolve_topics()
         self.fallback_topics = {
             topic.lower()
@@ -64,6 +67,7 @@ class MQTTService:
                 app.logger.exception("MQTT connection error: %s", exc)
 
         threading.Thread(target=_runner, daemon=True).start()
+        self._start_discovery_loop()
 
     def _resolve_topics(self) -> list[str]:
         raw_topics = self.app.config.get("MQTT_TOPICS") if self.app else None
@@ -211,6 +215,8 @@ class MQTTService:
         nonce = self._generate_nonce(nonce_length)
         with self.pending_lock:
             self._prune_pending_nonces()
+            if len(self.pending_nonces) > 200:
+                self._drop_oldest_nonces(100)
             while nonce in self.pending_nonces:
                 nonce = self._generate_nonce(nonce_length)
             self.pending_nonces[nonce] = time.time()
@@ -272,6 +278,30 @@ class MQTTService:
         stale = [nonce for nonce, ts in self.pending_nonces.items() if now - ts > ttl_sec]
         for nonce in stale:
             self.pending_nonces.pop(nonce, None)
+
+    def _drop_oldest_nonces(self, count: int) -> None:
+        if count <= 0 or not self.pending_nonces:
+            return
+        sorted_nonces = sorted(self.pending_nonces.items(), key=lambda item: item[1])
+        for nonce, _ in sorted_nonces[:count]:
+            self.pending_nonces.pop(nonce, None)
+
+    def _start_discovery_loop(self) -> None:
+        if self.discovery_thread_started or self.discovery_interval <= 0:
+            return
+        self.discovery_thread_started = True
+
+        def _loop():
+            while True:
+                try:
+                    if self.client and self.client.is_connected():
+                        self.publish_discover()
+                except Exception as exc:  # noqa: BLE001
+                    if self.app:
+                        self.app.logger.exception("Discovery loop error: %s", exc)
+                time.sleep(self.discovery_interval)
+
+        threading.Thread(target=_loop, daemon=True).start()
 
     def _emit_log(self, log: Log, device: Device) -> None:
         log_data = {
