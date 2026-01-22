@@ -263,6 +263,10 @@ class MQTTService:
             device.network_profile = profile
         profile.last_seen = datetime.utcnow()
         db.session.commit()
+        socketio.emit(
+            "device:registered",
+            {"device_id": device.id, "esp_id": device.esp_id},
+        )
         return device
 
     def _generate_nonce(self, length: int = 8) -> str:

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
+import { getSocket } from '../lib/socket'
 import DeviceTable from '../components/DeviceTable.jsx'
 import WifiModal from '../components/WifiModal.jsx'
 import MqttModal from '../components/MqttModal.jsx'
@@ -82,6 +83,17 @@ const ESPConfigPage = () => {
 
   useEffect(() => {
     fetchDevices()
+  }, [fetchDevices])
+
+  useEffect(() => {
+    const socket = getSocket()
+    const handleRegistered = () => {
+      fetchDevices()
+    }
+    socket.on('device:registered', handleRegistered)
+    return () => {
+      socket.off('device:registered', handleRegistered)
+    }
   }, [fetchDevices])
 
   const pingDevices = useCallback(async () => {

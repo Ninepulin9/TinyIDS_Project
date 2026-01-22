@@ -15,7 +15,7 @@ services:
       - MQTT_TLS_ENABLED=true
       - MQTT_TLS_CA_CERTS=/certs/mosquitto.org.crt
       - MQTT_TLS_INSECURE=false
-      - MQTT_DISCOVERY_INTERVAL=15
+      - MQTT_DISCOVERY_INTERVAL=5
       - ALLOWED_ORIGIN=*
       - CORS_ORIGINS=*
     ports:
@@ -37,7 +37,7 @@ services:
     build: ./frontend
     container_name: tinyids-frontend
     environment:
-      - VITE_API_BASE_URL=http://backend:5000
+      - VITE_API_BASE_URL=http://bตโนackend:5000
       - VITE_WS_BASE_URL=http://backend:5000
     ports:
       - "5173:5173"
