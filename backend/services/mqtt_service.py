@@ -1,5 +1,8 @@
 import json
+import secrets
+import string
 import threading
+import time
 from datetime import datetime
 from typing import Optional
 
@@ -18,6 +21,9 @@ class MQTTService:
         self.app = None
         self.topics: list[str] = []
         self.fallback_topics: set[str] = set()
+        self.discovery_topic = "esp/Entrance"
+        self.pending_nonces: dict[str, float] = {}
+        self.pending_lock = threading.Lock()
 
     def init_app(self, app) -> None:
         self.app = app
@@ -114,6 +120,9 @@ class MQTTService:
             payload = {"message": payload}
 
         with self.app.app_context():
+            if topic_key in {"esp/entrance", "esp/esp/entrance"}:
+                if self._handle_discovery_reply(payload, topic):
+                    return
             if topic_key == "esp/alert":
                 self._handle_alert(payload, topic)
             elif topic_key in {"esp/setting/now", "esp/setting/control"}:
@@ -195,6 +204,74 @@ class MQTTService:
         db.session.add(log)
         db.session.commit()
         self._emit_log(log, device)
+
+    def publish_discover(self, nonce_length: int = 8, topic: str | None = None) -> str | None:
+        if not self.client:
+            return None
+        nonce = self._generate_nonce(nonce_length)
+        with self.pending_lock:
+            self._prune_pending_nonces()
+            while nonce in self.pending_nonces:
+                nonce = self._generate_nonce(nonce_length)
+            self.pending_nonces[nonce] = time.time()
+        payload = {"cmd": "DISCOVER", "nonce": nonce}
+        target_topic = topic or self.discovery_topic
+        self.client.publish(target_topic, json.dumps(payload), qos=0, retain=False)
+        return nonce
+
+    def _handle_discovery_reply(self, payload: dict, topic: str) -> bool:
+        nonce = self._coerce_str(payload.get("nonce"))
+        token = self._coerce_str(payload.get("token"))
+        device_id = self._coerce_str(payload.get("device_id") or payload.get("deviceId"))
+        if not nonce or not token or not device_id:
+            return False
+        with self.pending_lock:
+            if nonce not in self.pending_nonces:
+                return False
+            self.pending_nonces.pop(nonce, None)
+        device = self._register_discovered_device(device_id, token)
+        if device and self.client:
+            confirm_message = f"Confirm-{nonce}-{token}"
+            self.client.publish(self.discovery_topic, confirm_message, qos=0, retain=False)
+            self.app.logger.info("Discovery confirmed for %s with nonce %s", device_id, nonce)
+        return True
+
+    def _register_discovered_device(self, device_id: str, token: str) -> Device | None:
+        owner = User.query.first()
+        if not owner:
+            self.app.logger.warning("No user found; skipping auto-registration for %s", device_id)
+            return None
+        device = Device.query.filter_by(esp_id=device_id).first()
+        if not device:
+            device = Device(user_id=owner.id, name="ESP32", esp_id=device_id, is_active=True)
+            db.session.add(device)
+            db.session.flush()
+        if device.token:
+            device.token.token = token
+        else:
+            db.session.add(DeviceToken(device_id=device.id, token=token))
+        profile = device.network_profile
+        if not profile:
+            profile = DeviceNetworkProfile(device_id=device.id, user_id=owner.id)
+            db.session.add(profile)
+            device.network_profile = profile
+        profile.last_seen = datetime.utcnow()
+        db.session.commit()
+        return device
+
+    def _generate_nonce(self, length: int = 8) -> str:
+        prefix = "N-"
+        max_total = 10
+        max_random = max_total - len(prefix)
+        random_len = max(1, min(int(length), max_random))
+        alphabet = string.ascii_letters + string.digits
+        return prefix + "".join(secrets.choice(alphabet) for _ in range(random_len))
+
+    def _prune_pending_nonces(self, ttl_sec: int = 300) -> None:
+        now = time.time()
+        stale = [nonce for nonce, ts in self.pending_nonces.items() if now - ts > ttl_sec]
+        for nonce in stale:
+            self.pending_nonces.pop(nonce, None)
 
     def _emit_log(self, log: Log, device: Device) -> None:
         log_data = {

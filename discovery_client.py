@@ -15,6 +15,7 @@ Environment variables (defaults are aimed at this TinyIDS stack):
   MQTT_USERNAME       (optional)
   MQTT_PASSWORD       (optional)
   DISCOVERY_TOPIC     esp/Entrance
+  DISCOVERY_REPLY_TOPIC esp/esp/Entrance
   NONCE_LENGTH        8
   WAIT_DEVICE_SEC     10
   WAIT_CONFIRM_SEC    5
@@ -33,8 +34,12 @@ import paho.mqtt.client as mqtt
 
 
 def generate_nonce(length: int = 8) -> str:
+    prefix = "N-"
+    max_total = 10
+    max_random = max_total - len(prefix)
+    random_len = max(1, min(length, max_random))
     alphabet = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(max(1, min(length, 10))))
+    return prefix + "".join(secrets.choice(alphabet) for _ in range(random_len))
 
 
 class DiscoveryClient:
@@ -43,6 +48,7 @@ class DiscoveryClient:
         host: str,
         port: int,
         topic: str,
+        reply_topic: Optional[str] = None,
         use_tls: bool = True,
         ca_certs: Optional[str] = None,
         username: Optional[str] = None,
@@ -53,6 +59,7 @@ class DiscoveryClient:
         self.host = host
         self.port = port
         self.topic = topic
+        self.reply_topic = reply_topic
         self.wait_device_sec = wait_device_sec
         self.wait_confirm_sec = wait_confirm_sec
 
@@ -63,6 +70,7 @@ class DiscoveryClient:
             self.client.tls_set(ca_certs=ca_certs)
 
         self.nonce: Optional[str] = None
+        self.used_nonces: set[str] = set()
         self.device_reply = threading.Event()
         self.device_id: Optional[str] = None
         self.token: Optional[str] = None
@@ -74,6 +82,8 @@ class DiscoveryClient:
     def _on_connect(self, client, userdata, flags, rc):  # noqa: D401
         if rc == 0:
             client.subscribe(self.topic)
+            if self.reply_topic and self.reply_topic != self.topic:
+                client.subscribe(self.reply_topic)
         else:
             print(f"[!] MQTT connect failed rc={rc}")
 
@@ -120,6 +130,7 @@ class DiscoveryClient:
         payload = {"cmd": "DISCOVER", "nonce": nonce}
         self.client.publish(self.topic, json.dumps(payload), qos=0, retain=False)
         self.nonce = nonce
+        self.used_nonces.add(nonce)
         print(f"[>] Sent DISCOVER with nonce={nonce} on topic {self.topic}")
 
     def publish_confirm(self):
@@ -149,6 +160,11 @@ class DiscoveryClient:
 def parse_args():
     parser = argparse.ArgumentParser(description="TinyIDS ESP discovery helper")
     parser.add_argument("--topic", default=os.getenv("DISCOVERY_TOPIC", "esp/Entrance"))
+    parser.add_argument(
+        "--reply-topic",
+        default=os.getenv("DISCOVERY_REPLY_TOPIC", "esp/esp/Entrance"),
+        help="MQTT topic to receive ESP discovery responses",
+    )
     parser.add_argument("--host", default=os.getenv("MQTT_HOST", "mosquitto"))
     parser.add_argument("--port", type=int, default=int(os.getenv("MQTT_PORT", 8883)))
     parser.add_argument("--no-tls", action="store_true", help="Disable TLS")
@@ -167,6 +183,7 @@ if __name__ == "__main__":
         host=args.host,
         port=args.port,
         topic=args.topic,
+        reply_topic=args.reply_topic,
         use_tls=not args.no_tls,
         ca_certs=args.ca_certs,
         username=args.username,
@@ -176,6 +193,8 @@ if __name__ == "__main__":
     )
 
     nonce = generate_nonce(args.nonce_length)
+    while nonce in client.used_nonces:
+        nonce = generate_nonce(args.nonce_length)
     client.start()
     try:
         client.run_once(nonce)

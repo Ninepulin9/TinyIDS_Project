@@ -295,3 +295,20 @@ def test_mqtt(device_id: int):
 
     db.session.commit()
     return jsonify({"ok": True, "message": "MQTT parameters look valid."})
+
+
+@devices_bp.route("/discover", methods=["POST"])
+@jwt_required()
+def discover_device():
+    if not mqtt_service.client:
+        return jsonify({"message": "MQTT client not connected"}), HTTPStatus.SERVICE_UNAVAILABLE
+    payload = request.get_json(silent=True) or {}
+    try:
+        nonce_length = int(payload.get("nonce_length", 8))
+    except (TypeError, ValueError):
+        return jsonify({"message": "nonce_length must be an integer"}), HTTPStatus.BAD_REQUEST
+    topic = payload.get("topic")
+    nonce = mqtt_service.publish_discover(nonce_length=nonce_length, topic=topic)
+    if not nonce:
+        return jsonify({"message": "Unable to publish discovery"}), HTTPStatus.SERVICE_UNAVAILABLE
+    return jsonify({"nonce": nonce, "topic": topic or mqtt_service.discovery_topic})
