@@ -77,20 +77,6 @@ const mergeLogs = (incoming, existing) => {
     .slice(0, 200)
 }
 
-const fallbackLogs = [
-  {
-    id: 1,
-    device_id: 10,
-    device_name: 'Lab Sensor A',
-    severity: 'High',
-    source_ip: '192.168.1.120',
-    destination_ip: '10.0.0.15',
-    type: 'SYN Flood',
-    description: 'Detected burst of SYN packets targeting the gateway.',
-    timestamp: '2025-11-09T20:00:00Z',
-  },
-]
-
 const LogsPage = () => {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -130,7 +116,7 @@ const LogsPage = () => {
       try {
         const { data } = await api.get('/api/logs')
         if (!isMountedRef.current) return
-        const records = Array.isArray(data) && data.length ? data : fallbackLogs
+        const records = Array.isArray(data) ? data : []
         setLogs((prev) => mergeLogs(records, prev))
       } catch (err) {
         if (!isMountedRef.current) return
@@ -139,7 +125,7 @@ const LogsPage = () => {
           err?.message ??
           'Unable to fetch intrusion logs right now. Please try again shortly.'
         setError(message)
-        setLogs((prev) => mergeLogs(fallbackLogs, prev))
+        setLogs((prev) => mergeLogs([], prev))
       } finally {
         if (isMountedRef.current && !silent) {
           setLoading(false)

@@ -7,44 +7,6 @@ import DeviceTable from '../components/DeviceTable.jsx'
 import WifiModal from '../components/WifiModal.jsx'
 import MqttModal from '../components/MqttModal.jsx'
 
-const sampleDevices = [
-  {
-    id: 'sample-1',
-    device_name: 'Lab Sensor A',
-    status: 'Connected',
-    last_seen: '2025-11-10T09:12:00Z',
-    ip_address: '192.168.10.21',
-    mac_address: 'AA:BB:CC:DD:EE:01',
-    active: true,
-    wifi: { ssid: 'TinyIDS-Lab' },
-    mqtt: { broker: 'lab-broker', topic: 'tinyids/sample/lab' },
-  },
-  {
-    id: 'sample-2',
-    device_name: 'Warehouse ESP-7',
-    status: 'Disconnected',
-    last_seen: '2025-11-09T20:45:00Z',
-    ip_address: '10.0.30.15',
-    mac_address: 'AA:BB:CC:DD:EE:02',
-    active: false,
-    wifi: { ssid: 'TinyIDS-Warehouse' },
-    mqtt: { broker: 'warehouse-broker', topic: 'tinyids/sample/warehouse' },
-  },
-  {
-    id: 'sample-3',
-    device_name: 'Perimeter Node 3',
-    status: 'Connected',
-    last_seen: '2025-11-10T08:30:00Z',
-    ip_address: '172.16.0.45',
-    mac_address: 'AA:BB:CC:DD:EE:03',
-    active: true,
-    wifi: { ssid: 'TinyIDS-Perimeter' },
-    mqtt: { broker: 'perimeter-broker', topic: 'tinyids/sample/perimeter' },
-  },
-]
-
-const isSampleDevice = (device) => String(device?.id ?? '').startsWith('sample-')
-
 const ESPConfigPage = () => {
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -63,19 +25,15 @@ const ESPConfigPage = () => {
     try {
       const { data } = await api.get('/api/devices')
       const fetchedDevices = Array.isArray(data) ? data : []
-      if (!fetchedDevices.length) {
-        setDevices(sampleDevices)
-      } else {
-        setDevices(fetchedDevices)
-      }
+      setDevices(fetchedDevices)
     } catch (err) {
       const message =
         err?.response?.data?.message ??
         err?.message ??
-        'Unable to load devices right now. Showing sample data instead.'
+        'Unable to load devices right now.'
       console.error('Unable to load devices', err)
-      setDevices(sampleDevices)
-      setError('')
+      setDevices([])
+      setError(message)
       toast.error(message)
     } finally {
       setLoading(false)
@@ -98,7 +56,7 @@ const ESPConfigPage = () => {
   }, [fetchDevices])
 
   const pingDevices = useCallback(async () => {
-    const liveDevices = devices.filter((d) => d?.id && !String(d.id).startsWith('sample-') && d.token)
+    const liveDevices = devices.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return
     try {
       await Promise.all(
@@ -120,7 +78,7 @@ const ESPConfigPage = () => {
       clearInterval(pingIntervalRef.current)
       pingIntervalRef.current = null
     }
-    const liveDevices = devices.filter((d) => d?.id && !String(d.id).startsWith('sample-') && d.token)
+    const liveDevices = devices.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return undefined
     pingIntervalRef.current = setInterval(() => {
       pingDevices()
@@ -159,12 +117,6 @@ const ESPConfigPage = () => {
     setTogglingId(device.id)
 
     setDevices((prev) => prev.map((item) => (item.id === device.id ? { ...item, active: nextActive } : item)))
-
-    if (isSampleDevice(device)) {
-      toast.success(`${device.device_name} ${nextActive ? 'activated' : 'deactivated'}`)
-      setTogglingId(null)
-      return
-    }
 
     if (!device.token) {
       toast.error('This device has no token set; cannot send AlertOn/AlertOff.')
@@ -269,7 +221,7 @@ const ESPConfigPage = () => {
         open={Boolean(selectedWifiDevice)}
         onClose={() => setSelectedWifiDevice(null)}
         onSaved={handleWifiSaved}
-        isDemo={isSampleDevice(selectedWifiDevice)}
+        isDemo={false}
       />
 
       <MqttModal
@@ -277,7 +229,7 @@ const ESPConfigPage = () => {
         open={Boolean(selectedMqttDevice)}
         onClose={() => setSelectedMqttDevice(null)}
         onSaved={handleMqttSaved}
-        isDemo={isSampleDevice(selectedMqttDevice)}
+        isDemo={false}
       />
     </div>
   )

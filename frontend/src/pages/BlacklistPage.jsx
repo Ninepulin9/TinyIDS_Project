@@ -5,30 +5,6 @@ import toast from 'react-hot-toast'
 import api from '../lib/api'
 import Button from '../components/ui/Button.jsx'
 
-const sampleBlacklist = [
-  {
-    id: 1,
-    device_name: 'Lab Sensor A',
-    ip_address: '192.168.1.120',
-    reason: 'SYN flood detected',
-    created_at: '2025-11-09T20:35:00Z',
-  },
-  {
-    id: 2,
-    device_name: 'Device 2',
-    ip_address: '203.0.113.195',
-    reason: 'Repeated suspicious packets',
-    created_at: '2025-11-09T18:25:00Z',
-  },
-  {
-    id: 3,
-    device_name: 'Perimeter Node 3',
-    ip_address: '192.168.1.150',
-    reason: 'Unauthorized access attempt',
-    created_at: '2025-11-08T10:05:00Z',
-  },
-]
-
 const formatTimestamp = (value) => {
   if (!value) return '--'
   try {
@@ -52,17 +28,13 @@ const BlacklistPage = () => {
     setLoading(true)
     try {
       const { data } = await api.get('/api/blacklist')
-      if (Array.isArray(data) && data.length) {
-        setEntries(data)
-      } else {
-        setEntries(sampleBlacklist)
-      }
+      setEntries(Array.isArray(data) ? data : [])
       setLastUpdated(new Date().toISOString())
     } catch (err) {
       const message =
         err?.response?.data?.message ?? err?.message ?? 'ไม่สามารถโหลดข้อมูล Blacklist ได้ ใช้ข้อมูลตัวอย่างแทน'
       toast.error(message)
-      setEntries(sampleBlacklist)
+      setEntries([])
     } finally {
       setLoading(false)
     }
