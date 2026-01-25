@@ -120,11 +120,12 @@ const ESPConfigPage = () => {
       clearInterval(pingIntervalRef.current)
       pingIntervalRef.current = null
     }
-    if (!devices.length) return undefined
+    const liveDevices = devices.filter((d) => d?.id && !String(d.id).startsWith('sample-') && d.token)
+    if (!liveDevices.length) return undefined
     pingIntervalRef.current = setInterval(() => {
       pingDevices()
       fetchDevices()
-    }, 5000)
+    }, 30000)
     return () => {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
@@ -179,6 +180,7 @@ const ESPConfigPage = () => {
         message,
         append_token: false,
       })
+      await api.patch(`/api/devices/${device.id}/active`, { active: nextActive })
       toast.success(`Sent ${message}`)
       setTimeout(() => {
         fetchDevices()
