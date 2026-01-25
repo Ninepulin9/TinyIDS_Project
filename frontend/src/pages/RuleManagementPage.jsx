@@ -141,6 +141,7 @@ const RuleManagementPage = () => {
   const [saving, setSaving] = useState(false)
   const [loadingRules, setLoadingRules] = useState(false)
   const [awaitingToken, setAwaitingToken] = useState('')
+  const loadTimeoutRef = useRef(null)
   const [expanded, setExpanded] = useState(() =>
     ruleSections.reduce((acc, section, idx) => ({ ...acc, [section.id]: idx === 0 }), {})
   )
@@ -314,6 +315,23 @@ const RuleManagementPage = () => {
         append_token: false,
       })
       toast.success('Requested settings (showsetting)')
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current)
+      }
+      loadTimeoutRef.current = setTimeout(async () => {
+        if (!deviceToken) return
+        try {
+          const { data } = await api.get('/api/logs')
+          const records = Array.isArray(data) ? data : []
+          const latestPayload = findLatestSettingsPayload(records, deviceToken)
+          if (!latestPayload) return
+          setRuleValues(mapPayloadToRules(latestPayload, deviceToken))
+          setAwaitingToken('')
+          toast.success('Loaded settings from device')
+        } catch {
+          // fallback is best-effort only
+        }
+      }, 2000)
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request settings'
       toast.error(message)
@@ -335,6 +353,10 @@ const RuleManagementPage = () => {
       if (topic !== 'esp/setting/now') return
       setRuleValues(mapPayloadToRules(data, awaitingToken))
       setAwaitingToken('')
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current)
+        loadTimeoutRef.current = null
+      }
       toast.success('Loaded settings from device')
     }
     socket.on('log:new', handleLogNew)
