@@ -221,18 +221,6 @@ const RuleManagementPage = () => {
     blocked_ips: coerceList(payload?.blocked_ips ?? payload?.BLOCKED_IPS),
   })
 
-  const findLatestSettingsPayload = (records, deviceToken) => {
-    const tokenNeedle = String(deviceToken ?? '').trim()
-    return records.find((log) => {
-      const payload = log?.payload ?? {}
-      const topic = String(payload?._mqtt_topic ?? '').toLowerCase()
-      const type = String(payload?.type ?? '').toLowerCase()
-      const token = String(payload?.token ?? '').trim()
-      const isSettings = topic === 'esp/setting/now' || type === 'esp settings'
-      return isSettings && (!tokenNeedle || token === tokenNeedle)
-    })?.payload
-  }
-
   const stopPolling = () => {
     if (pollRef.current.timer) {
       clearInterval(pollRef.current.timer)
@@ -243,11 +231,9 @@ const RuleManagementPage = () => {
 
   const pollSettingsOnce = async (deviceToken) => {
     try {
-      const { data } = await api.get('/api/logs')
-      const records = Array.isArray(data) ? data : []
-      const latestPayload = findLatestSettingsPayload(records, deviceToken)
-      if (!latestPayload) return false
-      setRuleValues(mapPayloadToRules(latestPayload, deviceToken))
+      const { data } = await api.get(`/api/devices/${selectedDevice.id}/settings/latest`)
+      if (!data) return false
+      setRuleValues(mapPayloadToRules(data, deviceToken))
       setAwaitingToken('')
       toast.success('Loaded settings from device')
       return true

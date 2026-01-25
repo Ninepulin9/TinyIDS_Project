@@ -297,6 +297,19 @@ def test_mqtt(device_id: int):
     return jsonify({"ok": True, "message": "MQTT parameters look valid."})
 
 
+@devices_bp.route("/<int:device_id>/settings/latest", methods=["GET"])
+@jwt_required()
+def latest_settings(device_id: int):
+    device = _get_device_or_404(device_id)
+    token_value = device.token.token if device.token else None
+    if not token_value:
+        return jsonify({"message": "token not set for this device"}), HTTPStatus.BAD_REQUEST
+    payload = mqtt_service.latest_settings.get(token_value)
+    if not payload:
+        return jsonify({"message": "settings not available yet"}), HTTPStatus.NOT_FOUND
+    return jsonify(payload)
+
+
 @devices_bp.route("/discover", methods=["POST"])
 @jwt_required()
 def discover_device():

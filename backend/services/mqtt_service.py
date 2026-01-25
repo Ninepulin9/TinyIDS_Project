@@ -26,6 +26,7 @@ class MQTTService:
         self.pending_nonces: dict[str, float] = {}
         self.pending_lock = threading.Lock()
         self.discovery_thread_started = False
+        self.latest_settings: dict[str, dict] = {}
 
     def init_app(self, app) -> None:
         self.app = app
@@ -167,6 +168,9 @@ class MQTTService:
         self._touch_device(device, payload, mark_active=True)
         enriched = self._enrich_payload(payload, topic, default_type="ESP Settings")
         enriched.setdefault("description", "Current configuration snapshot reported by ESP.")
+        token_value = self._coerce_str(enriched.get("token"))
+        if token_value:
+            self.latest_settings[token_value] = dict(enriched)
         log = Log(
             user_id=device.user_id,
             device=device,
