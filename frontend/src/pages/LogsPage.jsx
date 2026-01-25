@@ -98,6 +98,8 @@ const LogsPage = () => {
   const [query, setQuery] = useState('')
   const [timeframeDays, setTimeframeDays] = useState(30)
   const [blacklistSet, setBlacklistSet] = useState(new Set())
+  const [page, setPage] = useState(1)
+  const pageSize = 15
   const isMountedRef = useRef(false)
   const pollIntervalRef = useRef(null)
 
@@ -204,6 +206,17 @@ const LogsPage = () => {
       return haystack.includes(lowerQuery)
     })
   }, [timeFilteredLogs, query])
+
+  useEffect(() => {
+    setPage(1)
+  }, [query, timeframeDays, timeFilteredLogs.length])
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize))
+  const pageSafe = Math.min(page, totalPages)
+  const pagedLogs = useMemo(() => {
+    const start = (pageSafe - 1) * pageSize
+    return filteredLogs.slice(start, start + pageSize)
+  }, [filteredLogs, pageSafe])
 
   const chartData = useMemo(() => {
     const daysWindow = Number(timeframeDays) === 7 ? 7 : 30
@@ -376,14 +389,14 @@ const LogsPage = () => {
                     {error}
                   </td>
                 </tr>
-              ) : filteredLogs.length === 0 ? (
+              ) : pagedLogs.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="px-4 py-10 text-center text-sm text-slate-500">
                     No intrusion events match the current search.
                   </td>
                 </tr>
               ) : (
-                filteredLogs.map((log) => {
+                pagedLogs.map((log) => {
                   const severity = log.severity ?? 'Low'
                   const chipClass = severityStyles[severity] ?? 'bg-slate-100 text-slate-600 ring-slate-200'
                   const ipKey = String(log.source_ip ?? '').trim().toLowerCase()
@@ -412,6 +425,30 @@ const LogsPage = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
+          <span>
+            Page {pageSafe} of {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={pageSafe <= 1}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Prev
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={pageSafe >= totalPages}
+              className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </section>
     </div>

@@ -125,7 +125,7 @@ const ESPConfigPage = () => {
     pingIntervalRef.current = setInterval(() => {
       pingDevices()
       fetchDevices()
-    }, 30000)
+    }, 10000)
     return () => {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
