@@ -3,6 +3,7 @@ import { Loader2, Settings } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import api from '../api/axios'
+import { getSocket } from '../lib/socket'
 
 const defaultRuleState = {
   token: '',
@@ -139,6 +140,7 @@ const RuleManagementPage = () => {
   const [ruleErrors, setRuleErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [loadingRules, setLoadingRules] = useState(false)
+  const [awaitingToken, setAwaitingToken] = useState('')
   const [expanded, setExpanded] = useState(() =>
     ruleSections.reduce((acc, section, idx) => ({ ...acc, [section.id]: idx === 0 }), {})
   )
@@ -304,29 +306,42 @@ const RuleManagementPage = () => {
       return
     }
     setLoadingRules(true)
+    setAwaitingToken(deviceToken)
     try {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
         message: `showsetting-${deviceToken}`,
         append_token: false,
       })
-      await new Promise((resolve) => setTimeout(resolve, 1200))
-      const { data } = await api.get('/api/logs')
-      const records = Array.isArray(data) ? data : []
-      const latestPayload = findLatestSettingsPayload(records, deviceToken)
-      if (!latestPayload) {
-        toast.error('No settings payload found yet. Try again in a moment.')
-        return
-      }
-      setRuleValues(mapPayloadToRules(latestPayload, deviceToken))
-      toast.success('Loaded settings from device')
+      toast.success('Requested settings (showsetting)')
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request settings'
       toast.error(message)
+      setAwaitingToken('')
     } finally {
       setLoadingRules(false)
     }
   }
+
+  useEffect(() => {
+    if (!awaitingToken) return
+    const socket = getSocket()
+    const handleLogNew = (payload) => {
+      const data = payload?.payload ?? payload
+      if (!data || typeof data !== 'object') return
+      const token = String(data.token ?? '').trim()
+      const topic = String(data._mqtt_topic ?? '').toLowerCase()
+      if (token !== awaitingToken) return
+      if (topic !== 'esp/setting/now') return
+      setRuleValues(mapPayloadToRules(data, awaitingToken))
+      setAwaitingToken('')
+      toast.success('Loaded settings from device')
+    }
+    socket.on('log:new', handleLogNew)
+    return () => {
+      socket.off('log:new', handleLogNew)
+    }
+  }, [awaitingToken])
 
   const renderStatus = (device) => {
     const online = (device.status ?? '').toLowerCase() === 'online'
