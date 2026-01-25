@@ -142,6 +142,7 @@ const RuleManagementPage = () => {
   const [loadingRules, setLoadingRules] = useState(false)
   const [awaitingToken, setAwaitingToken] = useState('')
   const loadTimeoutRef = useRef(null)
+  const pollRef = useRef({ timer: null, attempts: 0 })
   const [expanded, setExpanded] = useState(() =>
     ruleSections.reduce((acc, section, idx) => ({ ...acc, [section.id]: idx === 0 }), {})
   )
@@ -232,6 +233,29 @@ const RuleManagementPage = () => {
     })?.payload
   }
 
+  const stopPolling = () => {
+    if (pollRef.current.timer) {
+      clearInterval(pollRef.current.timer)
+      pollRef.current.timer = null
+    }
+    pollRef.current.attempts = 0
+  }
+
+  const pollSettingsOnce = async (deviceToken) => {
+    try {
+      const { data } = await api.get('/api/logs')
+      const records = Array.isArray(data) ? data : []
+      const latestPayload = findLatestSettingsPayload(records, deviceToken)
+      if (!latestPayload) return false
+      setRuleValues(mapPayloadToRules(latestPayload, deviceToken))
+      setAwaitingToken('')
+      toast.success('Loaded settings from device')
+      return true
+    } catch {
+      return false
+    }
+  }
+
   const validate = () => {
     const errors = {}
     if (!ruleValues.token.trim()) errors.token = 'Token is required'
@@ -318,24 +342,22 @@ const RuleManagementPage = () => {
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current)
       }
-      loadTimeoutRef.current = setTimeout(async () => {
-        if (!deviceToken) return
-        try {
-          const { data } = await api.get('/api/logs')
-          const records = Array.isArray(data) ? data : []
-          const latestPayload = findLatestSettingsPayload(records, deviceToken)
-          if (!latestPayload) return
-          setRuleValues(mapPayloadToRules(latestPayload, deviceToken))
-          setAwaitingToken('')
-          toast.success('Loaded settings from device')
-        } catch {
-          // fallback is best-effort only
+      stopPolling()
+      pollRef.current.timer = setInterval(async () => {
+        pollRef.current.attempts += 1
+        const done = await pollSettingsOnce(deviceToken)
+        if (done || pollRef.current.attempts >= 10) {
+          stopPolling()
+          if (!done) {
+            toast.error('No settings payload found yet. Try again.')
+          }
         }
-      }, 2000)
+      }, 1000)
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request settings'
       toast.error(message)
       setAwaitingToken('')
+      stopPolling()
     } finally {
       setLoadingRules(false)
     }
@@ -357,6 +379,7 @@ const RuleManagementPage = () => {
         clearTimeout(loadTimeoutRef.current)
         loadTimeoutRef.current = null
       }
+      stopPolling()
       toast.success('Loaded settings from device')
     }
     socket.on('log:new', handleLogNew)
