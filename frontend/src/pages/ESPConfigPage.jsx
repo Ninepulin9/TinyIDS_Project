@@ -105,7 +105,7 @@ const ESPConfigPage = () => {
         liveDevices.map((device) =>
           api.post(`/api/devices/${device.id}/publish`, {
             topic_base: 'esp/Alive/Check',
-            message: `Test-${device.token}`,
+            message: `test-${device.token}`,
             append_token: false,
           }),
         ),
@@ -125,7 +125,7 @@ const ESPConfigPage = () => {
     pingIntervalRef.current = setInterval(() => {
       pingDevices()
       fetchDevices()
-    }, 10000)
+    }, 30000)
     return () => {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
