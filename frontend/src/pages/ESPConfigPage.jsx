@@ -105,7 +105,7 @@ const ESPConfigPage = () => {
         liveDevices.map((device) =>
           api.post(`/api/devices/${device.id}/publish`, {
             topic_base: 'esp/Alive/Check',
-            message: `test-${device.token}`,
+            message: `Test-${device.token}`,
             append_token: false,
           }),
         ),

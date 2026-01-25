@@ -189,6 +189,46 @@ const RuleManagementPage = () => {
     setRuleErrors((prev) => ({ ...prev, [field]: undefined }))
   }
 
+  const coerceList = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item)).join(', ')
+    }
+    if (value == null) return ''
+    return String(value)
+  }
+
+  const mapPayloadToRules = (payload, fallbackToken) => ({
+    token: payload?.token ?? fallbackToken ?? '',
+    cfg_rate_limit_count: payload?.CFG_RATE_LIMIT_COUNT ?? payload?.cfg_rate_limit_count ?? '',
+    cfg_rate_limit_seconds: payload?.CFG_RATE_LIMIT_SECONDS ?? payload?.cfg_rate_limit_seconds ?? '',
+    cfg_oversized_threshold: payload?.CFG_OVERSIZED_THRESHOLD ?? payload?.cfg_oversized_threshold ?? '',
+    cfg_http_url_max_len: payload?.CFG_HTTP_URL_MAX_LEN ?? payload?.cfg_http_url_max_len ?? '',
+    cfg_rssi_diff_threshold: payload?.CFG_RSSI_DIFF_THRESHOLD ?? payload?.cfg_rssi_diff_threshold ?? '',
+    cfg_syn_flood_threshold: payload?.CFG_SYN_FLOOD_THRESHOLD ?? payload?.cfg_syn_flood_threshold ?? '',
+    cfg_syn_flood_seconds: payload?.CFG_SYN_FLOOD_SECONDS ?? payload?.cfg_syn_flood_seconds ?? '',
+    cfg_syn_timeout: payload?.CFG_SYN_TIMEOUT ?? payload?.cfg_syn_timeout ?? '',
+    cfg_http_bf_threshold: payload?.CFG_HTTP_BF_THRESHOLD ?? payload?.cfg_http_bf_threshold ?? '',
+    cfg_http_bf_window: payload?.CFG_HTTP_BF_WINDOW ?? payload?.cfg_http_bf_window ?? '',
+    cfg_http_bf_block_time: payload?.CFG_HTTP_BF_BLOCK_TIME ?? payload?.cfg_http_bf_block_time ?? '',
+    cfg_deauth_cooldown_ms: payload?.CFG_DEAUTH_COOLDOWN_MS ?? payload?.cfg_deauth_cooldown_ms ?? '',
+    g_trusted_channel: coerceList(payload?.g_trusted_channel ?? payload?.G_TRUSTED_CHANNEL),
+    g_target_trusted_mac: coerceList(payload?.g_target_trusted_mac ?? payload?.G_TARGET_TRUSTED_MAC),
+    g_mqtt_whitelist: coerceList(payload?.g_mqtt_whitelist ?? payload?.G_MQTT_WHITELIST),
+    blocked_ips: coerceList(payload?.blocked_ips ?? payload?.BLOCKED_IPS),
+  })
+
+  const findLatestSettingsPayload = (records, deviceToken) => {
+    const tokenNeedle = String(deviceToken ?? '').trim()
+    return records.find((log) => {
+      const payload = log?.payload ?? {}
+      const topic = String(payload?._mqtt_topic ?? '').toLowerCase()
+      const type = String(payload?.type ?? '').toLowerCase()
+      const token = String(payload?.token ?? '').trim()
+      const isSettings = topic === 'esp/setting/now' || type === 'esp settings'
+      return isSettings && (!tokenNeedle || token === tokenNeedle)
+    })?.payload
+  }
+
   const validate = () => {
     const errors = {}
     if (!ruleValues.token.trim()) errors.token = 'Token is required'
@@ -245,7 +285,7 @@ const RuleManagementPage = () => {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
         payload,
-        append_token: true,
+        append_token: false,
       })
       toast.success('Settings sent to device')
     } catch (err) {
@@ -258,16 +298,33 @@ const RuleManagementPage = () => {
 
   const handleLoadFromDevice = async () => {
     if (!selectedDevice) return
+    const deviceToken = ruleValues.token?.trim() || selectedDevice.token
+    if (!deviceToken) {
+      toast.error('No token found for this device.')
+      return
+    }
+    setLoadingRules(true)
     try {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
-        message: 'showsetting',
-        append_token: true,
+        message: `showsetting-${deviceToken}`,
+        append_token: false,
       })
-      toast.success('Requested settings (showsetting)')
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+      const { data } = await api.get('/api/logs')
+      const records = Array.isArray(data) ? data : []
+      const latestPayload = findLatestSettingsPayload(records, deviceToken)
+      if (!latestPayload) {
+        toast.error('No settings payload found yet. Try again in a moment.')
+        return
+      }
+      setRuleValues(mapPayloadToRules(latestPayload, deviceToken))
+      toast.success('Loaded settings from device')
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request settings'
       toast.error(message)
+    } finally {
+      setLoadingRules(false)
     }
   }
 
