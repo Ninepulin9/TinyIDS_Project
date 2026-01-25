@@ -235,6 +235,10 @@ class MQTTService:
             if nonce not in self.pending_nonces:
                 return False
             self.pending_nonces.pop(nonce, None)
+        existing = Device.query.filter_by(esp_id=device_id).first()
+        if existing and existing.token:
+            self.app.logger.info("Discovery ignored for %s; already registered", device_id)
+            return True
         device = self._register_discovered_device(device_id, token)
         if device and self.client:
             confirm_message = f"Confirm-{nonce}-{token}"
@@ -252,9 +256,7 @@ class MQTTService:
             device = Device(user_id=owner.id, name="ESP32", esp_id=device_id, is_active=True)
             db.session.add(device)
             db.session.flush()
-        if device.token:
-            device.token.token = token
-        else:
+        if not device.token:
             db.session.add(DeviceToken(device_id=device.id, token=token))
         profile = device.network_profile
         if not profile:
