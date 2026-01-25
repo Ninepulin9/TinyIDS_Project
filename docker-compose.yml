@@ -10,7 +10,7 @@ services:
       - JWT_SECRET_KEY=super-secret-jwt
       - SECRET_KEY=super-secret-key
       - MQTT_BROKER_URL=test.mosquitto.org
-      - MQTT_TOPICS=esp/alert,esp/setting/now,esp/alive,esp/Entrance,esp/esp/Entrance
+      - MQTT_TOPICS=esp/alert,esp/setting/now,esp/setting/Now,esp/setting/#,esp/alive,esp/Entrance,esp/esp/Entrance
       - MQTT_BROKER_PORT=8883
       - MQTT_TLS_ENABLED=true
       - MQTT_TLS_CA_CERTS=/certs/mosquitto.org.crt
@@ -22,7 +22,7 @@ services:
       - "5000:5000"
     volumes:
       - ./backend:/app
-      - ${MQTT_CA_PATH:-./mosquitto/certs/mosquitto.org.crt}:/certs/mosquitto.org.crt:ro
+      - /home/pi/mosquitto.org.crt:/certs/mosquitto.org.crt:ro
     depends_on:
       db:
         condition: service_healthy
