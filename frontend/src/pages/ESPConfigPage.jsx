@@ -20,6 +20,8 @@ const ESPConfigPage = () => {
   const [deletingId, setDeletingId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [reregisterTarget, setReregisterTarget] = useState(null)
+  const [renameTarget, setRenameTarget] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
   const pingIntervalRef = useRef(null)
 
   const fetchDevices = useCallback(async () => {
@@ -200,10 +202,14 @@ const ESPConfigPage = () => {
 
   const handleRenameDevice = async (device) => {
     if (!device?.id) return
-    const currentName = device.device_name ?? device.name ?? ''
-    const nextName = window.prompt('Enter device name', currentName)
-    if (nextName == null) return
-    const trimmed = nextName.trim()
+    setRenameTarget(device)
+    setRenameValue(device.device_name ?? device.name ?? '')
+  }
+
+  const confirmRenameDevice = async () => {
+    const device = renameTarget
+    if (!device?.id) return
+    const trimmed = renameValue.trim()
     if (!trimmed) {
       toast.error('Device name is required.')
       return
@@ -218,6 +224,9 @@ const ESPConfigPage = () => {
         err?.message ??
         'Unable to update device name. Please try again.'
       toast.error(message)
+    } finally {
+      setRenameTarget(null)
+      setRenameValue('')
     }
   }
 
@@ -332,6 +341,45 @@ const ESPConfigPage = () => {
                 className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {deletingId === deleteTarget.id ? 'Deleting...' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renameTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Rename device</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Update name for{' '}
+              <span className="font-semibold">{renameTarget.device_name ?? renameTarget.name ?? renameTarget.id}</span>
+              .
+            </p>
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+              placeholder="Device name"
+            />
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRenameTarget(null)
+                  setRenameValue('')
+                }}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRenameDevice}
+                className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
+              >
+                Save
               </button>
             </div>
           </div>
