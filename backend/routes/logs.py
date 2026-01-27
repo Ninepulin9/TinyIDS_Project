@@ -55,6 +55,7 @@ def _serialize_log(log: Log) -> dict:
     device_name = log.device.name if log.device else _derive_field(payload, "device_name", "device")
 
     event_type = _derive_field(payload, "type", "attack_type", "event_type", default="Unknown")
+    alert_msg = _derive_field(payload, "alert_msg", "alert", "message", "summary")
     description = _derive_field(
         payload,
         "description",
@@ -71,6 +72,7 @@ def _serialize_log(log: Log) -> dict:
         "timestamp": _to_utc_iso(log.created_at),
         "severity": _normalize_severity(log.severity),
         "type": event_type,
+        "alert_msg": alert_msg,
         "description": description,
         "source_ip": log.source_ip or payload.get("source_ip"),
         "destination_ip": log.destination_ip or payload.get("destination_ip"),

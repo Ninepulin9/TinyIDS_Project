@@ -53,7 +53,13 @@ const normalizeSocketLog = (data) => {
       payload['destination ip'] ??
       payload['destination-ip'],
     type: payload.type ?? payload.attack_type ?? payload.event_type ?? 'Unknown',
-    alert_msg: payload.alert_msg ?? payload.message ?? payload.summary ?? payload.alert ?? '',
+    alert_msg:
+      payload.alert_msg ??
+      data.alert_msg ??
+      payload.message ??
+      payload.summary ??
+      payload.alert ??
+      '',
     description:
       payload.description ??
       payload.detail ??
