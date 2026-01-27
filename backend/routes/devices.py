@@ -140,6 +140,15 @@ def update_active(device_id: int):
     return jsonify(_serialize_device(device))
 
 
+@devices_bp.route("/<int:device_id>", methods=["DELETE"])
+@jwt_required()
+def delete_device(device_id: int):
+    device = _get_device_or_404(device_id)
+    db.session.delete(device)
+    db.session.commit()
+    return jsonify({"status": "deleted", "id": device_id})
+
+
 @devices_bp.route("/<int:device_id>/wifi", methods=["PATCH"])
 @jwt_required()
 def update_wifi(device_id: int):
@@ -308,6 +317,18 @@ def latest_settings(device_id: int):
     if not payload:
         return jsonify({"message": "settings not available yet"}), HTTPStatus.NOT_FOUND
     return jsonify(payload)
+
+
+@devices_bp.route("/<int:device_id>/reregister", methods=["POST"])
+@jwt_required()
+def request_reregister(device_id: int):
+    device = _get_device_or_404(device_id)
+    if device.token:
+        DeviceToken.query.filter_by(device_id=device.id).delete()
+    device.is_active = False
+    db.session.commit()
+    mqtt_service.request_reregister(device.esp_id)
+    return jsonify({"status": "ok", "message": "Device marked for re-registration"})
 
 
 @devices_bp.route("/discover", methods=["POST"])

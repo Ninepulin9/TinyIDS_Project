@@ -23,6 +23,8 @@ class MQTTService:
         self.fallback_topics: set[str] = set()
         self.discovery_topic = "esp/Entrance"
         self.discovery_interval = 0
+        self.allow_reregister = True
+        self.reregister_once: set[str] = set()
         self.pending_nonces: dict[str, float] = {}
         self.pending_lock = threading.Lock()
         self.discovery_thread_started = False
@@ -49,6 +51,7 @@ class MQTTService:
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.discovery_interval = int(app.config.get("MQTT_DISCOVERY_INTERVAL", 0) or 0)
+        self.allow_reregister = bool(app.config.get("MQTT_ALLOW_REREGISTER", True))
         self.topics = self._resolve_topics()
         self.fallback_topics = {
             topic.lower()
@@ -241,16 +244,21 @@ class MQTTService:
             self.pending_nonces.pop(nonce, None)
         existing = Device.query.filter_by(esp_id=device_id).first()
         if existing and existing.token:
-            self.app.logger.info("Discovery ignored for %s; already registered", device_id)
-            return True
-        device = self._register_discovered_device(device_id, token)
+            if device_id in self.reregister_once or self.allow_reregister:
+                self.reregister_once.discard(device_id)
+                device = self._register_discovered_device(device_id, token, update_token=True)
+            else:
+                self.app.logger.info("Discovery ignored for %s; already registered", device_id)
+                return True
+        else:
+            device = self._register_discovered_device(device_id, token, update_token=False)
         if device and self.client:
             confirm_message = f"Confirm-{nonce}-{token}"
             self.client.publish(self.discovery_topic, confirm_message, qos=0, retain=False)
             self.app.logger.info("Discovery confirmed for %s with nonce %s", device_id, nonce)
         return True
 
-    def _register_discovered_device(self, device_id: str, token: str) -> Device | None:
+    def _register_discovered_device(self, device_id: str, token: str, update_token: bool = False) -> Device | None:
         owner = User.query.first()
         if not owner:
             self.app.logger.warning("No user found; skipping auto-registration for %s", device_id)
@@ -260,7 +268,10 @@ class MQTTService:
             device = Device(user_id=owner.id, name="ESP32", esp_id=device_id, is_active=True)
             db.session.add(device)
             db.session.flush()
-        if not device.token:
+        if device.token:
+            if update_token:
+                device.token.token = token
+        else:
             db.session.add(DeviceToken(device_id=device.id, token=token))
         profile = device.network_profile
         if not profile:
@@ -274,6 +285,9 @@ class MQTTService:
             {"device_id": device.id, "esp_id": device.esp_id},
         )
         return device
+
+    def request_reregister(self, device_id: str) -> None:
+        self.reregister_once.add(device_id)
 
     def _generate_nonce(self, length: int = 8) -> str:
         prefix = "N-"

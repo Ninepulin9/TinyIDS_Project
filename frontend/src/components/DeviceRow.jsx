@@ -1,15 +1,19 @@
 import dayjs from 'dayjs'
 import Badge from './ui/Badge.jsx'
 import Toggle from './ui/Toggle.jsx'
+import Button from './ui/Button.jsx'
 
 const statusVariant = (status) => {
   if (!status) return 'muted'
   return status.toLowerCase() === 'connected' ? 'success' : 'danger'
 }
 
-const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, toggling = false }) => {
+const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, toggling = false }) => {
   const handleToggle = () => {
     onToggleActive?.(device)
+  }
+  const handleDelete = () => {
+    onDelete?.(device)
   }
 
   return (
@@ -38,6 +42,16 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, toggling = 
           disabled={toggling}
           label={`Toggle ${device.device_name} active`}
         />
+      </td>
+      <td className="px-4 py-4 align-middle text-right">
+        <Button
+          type="button"
+          variant="ghost"
+          className="rounded-full border border-rose-500 bg-white px-4 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
+          onClick={handleDelete}
+        >
+          Delete
+        </Button>
       </td>
     </tr>
   )

@@ -17,6 +17,7 @@ const ESPConfigPage = () => {
   const [selectedMqttDevice, setSelectedMqttDevice] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
   const [discovering, setDiscovering] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
   const pingIntervalRef = useRef(null)
 
   const fetchDevices = useCallback(async () => {
@@ -165,6 +166,26 @@ const ESPConfigPage = () => {
     }
   }
 
+  const handleDeleteDevice = async (device) => {
+    if (!device?.id) return
+    const confirmDelete = window.confirm(`Delete device ${device.device_name ?? device.name ?? device.id}?`)
+    if (!confirmDelete) return
+    setDeletingId(device.id)
+    try {
+      await api.delete(`/api/devices/${device.id}`)
+      setDevices((prev) => prev.filter((item) => item.id !== device.id))
+      toast.success('Device deleted')
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ??
+        err?.message ??
+        'Unable to delete device. Please try again.'
+      toast.error(message)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const handleDiscover = async () => {
     setDiscovering(true)
     try {
@@ -211,6 +232,7 @@ const ESPConfigPage = () => {
           onEditWifi={setSelectedWifiDevice}
           onEditMqtt={setSelectedMqttDevice}
           onToggleActive={handleToggleActive}
+          onDelete={handleDeleteDevice}
           togglingId={togglingId}
           withContainer={false}
         />
