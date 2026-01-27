@@ -18,6 +18,7 @@ const ESPConfigPage = () => {
   const [togglingId, setTogglingId] = useState(null)
   const [discovering, setDiscovering] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const pingIntervalRef = useRef(null)
 
   const fetchDevices = useCallback(async () => {
@@ -166,10 +167,14 @@ const ESPConfigPage = () => {
     }
   }
 
-  const handleDeleteDevice = async (device) => {
+  const handleDeleteDevice = (device) => {
     if (!device?.id) return
-    const confirmDelete = window.confirm(`Delete device ${device.device_name ?? device.name ?? device.id}?`)
-    if (!confirmDelete) return
+    setDeleteTarget(device)
+  }
+
+  const confirmDeleteDevice = async () => {
+    const device = deleteTarget
+    if (!device?.id) return
     setDeletingId(device.id)
     try {
       await api.delete(`/api/devices/${device.id}`)
@@ -183,6 +188,25 @@ const ESPConfigPage = () => {
       toast.error(message)
     } finally {
       setDeletingId(null)
+      setDeleteTarget(null)
+    }
+  }
+
+  const handleReregisterDevice = async (device) => {
+    if (!device?.id) return
+    const confirmAction = window.confirm(
+      `Re-register device ${device.device_name ?? device.name ?? device.id}? This will reset its token.`,
+    )
+    if (!confirmAction) return
+    try {
+      await api.post(`/api/devices/${device.id}/reregister`)
+      toast.success('Device marked for re-registration')
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ??
+        err?.message ??
+        'Unable to re-register device. Please try again.'
+      toast.error(message)
     }
   }
 
@@ -233,6 +257,7 @@ const ESPConfigPage = () => {
           onEditMqtt={setSelectedMqttDevice}
           onToggleActive={handleToggleActive}
           onDelete={handleDeleteDevice}
+          onReregister={handleReregisterDevice}
           togglingId={togglingId}
           withContainer={false}
         />
@@ -253,6 +278,36 @@ const ESPConfigPage = () => {
         onSaved={handleMqttSaved}
         isDemo={false}
       />
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Delete device?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              This will remove{' '}
+              <span className="font-semibold">{deleteTarget.device_name ?? deleteTarget.name ?? deleteTarget.id}</span>
+              .
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteDevice}
+                disabled={deletingId === deleteTarget.id}
+                className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {deletingId === deleteTarget.id ? 'Deleting...' : 'Yes, delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

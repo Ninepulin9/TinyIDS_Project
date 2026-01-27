@@ -15,6 +15,7 @@ const DeviceTable = ({
   onEditMqtt,
   onToggleActive,
   onDelete,
+  onReregister,
   togglingId,
   showHeader = true,
   withContainer = true,
@@ -115,6 +116,7 @@ const DeviceTable = ({
                   onEditMqtt={onEditMqtt}
                   onToggleActive={onToggleActive}
                   onDelete={onDelete}
+                  onReregister={onReregister}
                   toggling={togglingId === device.id}
                 />
               ))}
