@@ -180,7 +180,7 @@ const RuleManagementPage = () => {
     }))
     setLoadingRules(false)
     if (device?.token) {
-      handleLoadFromDevice()
+      handleLoadFromDevice(device)
     }
   }
 
@@ -232,9 +232,9 @@ const RuleManagementPage = () => {
     pollRef.current.attempts = 0
   }
 
-  const pollSettingsOnce = async (deviceToken) => {
+  const pollSettingsOnce = async (deviceToken, deviceId) => {
     try {
-      const { data } = await api.get(`/api/devices/${selectedDevice.id}/settings/latest`)
+      const { data } = await api.get(`/api/devices/${deviceId}/settings/latest`)
       if (!data) return false
       setRuleValues(mapPayloadToRules(data, deviceToken))
       setAwaitingToken('')
@@ -312,9 +312,10 @@ const RuleManagementPage = () => {
     }
   }
 
-  const handleLoadFromDevice = async () => {
-    if (!selectedDevice) return
-    const deviceToken = ruleValues.token?.trim() || selectedDevice.token
+  const handleLoadFromDevice = async (deviceOverride) => {
+    const targetDevice = deviceOverride ?? selectedDevice
+    if (!targetDevice) return
+    const deviceToken = (deviceOverride?.token ?? ruleValues.token)?.trim() || targetDevice.token
     if (!deviceToken) {
       toast.error('No token found for this device.')
       return
@@ -322,7 +323,7 @@ const RuleManagementPage = () => {
     setLoadingRules(true)
     setAwaitingToken(deviceToken)
     try {
-      await api.post(`/api/devices/${selectedDevice.id}/publish`, {
+      await api.post(`/api/devices/${targetDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
         message: `showsetting-${deviceToken}`,
         append_token: false,
@@ -334,7 +335,7 @@ const RuleManagementPage = () => {
       stopPolling()
       pollRef.current.timer = setInterval(async () => {
         pollRef.current.attempts += 1
-        const done = await pollSettingsOnce(deviceToken)
+        const done = await pollSettingsOnce(deviceToken, targetDevice.id)
         if (done || pollRef.current.attempts >= 10) {
           stopPolling()
           if (!done) {
