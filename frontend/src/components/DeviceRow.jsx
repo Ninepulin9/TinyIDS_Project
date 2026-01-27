@@ -5,7 +5,7 @@ import Button from './ui/Button.jsx'
 
 const statusVariant = (status) => {
   if (!status) return 'muted'
-  return status.toLowerCase() === 'connected' ? 'success' : 'danger'
+  return status.toLowerCase() === 'connected' || status.toLowerCase() === 'online' ? 'success' : 'danger'
 }
 
 const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, onReregister, toggling = false }) => {
@@ -23,7 +23,9 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
     <tr className="border-b border-slate-100 last:border-none hover:bg-slate-50/70 transition">
       <td className="px-4 py-4 align-middle text-sm font-semibold text-slate-900">{device.device_name}</td>
       <td className="px-4 py-4 align-middle">
-        <Badge variant={statusVariant(device.status)}>{device.status ?? 'Unknown'}</Badge>
+        <Badge variant={statusVariant(device.status)}>
+          {device.status?.toLowerCase() === 'active' ? 'Online' : device.status ?? 'Unknown'}
+        </Badge>
         {device.last_seen && (
           <p className="mt-1 text-xs text-slate-400">Last seen {dayjs(device.last_seen).format('MMM D, YYYY HH:mm')}</p>
         )}
@@ -43,7 +45,7 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
           checked={Boolean(device.active)}
           onChange={handleToggle}
           disabled={toggling}
-          label={`Toggle ${device.device_name} active`}
+          label={`Toggle ${device.device_name} alert mode`}
         />
       </td>
       <td className="px-4 py-4 align-middle text-right pr-6 whitespace-nowrap">

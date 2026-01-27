@@ -49,11 +49,11 @@ const DeviceTable = ({
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">Device Name</th>
-              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Device Status</th>
               <th className="px-4 py-3">IP Address</th>
               <th className="px-4 py-3 hidden">Wi-Fi</th>
               <th className="px-4 py-3 hidden">MQTT</th>
-              <th className="px-4 py-3">Active</th>
+              <th className="px-4 py-3">Alert Mode</th>
               <th className="px-4 py-3 text-right pr-6">Actions</th>
             </tr>
           </thead>
