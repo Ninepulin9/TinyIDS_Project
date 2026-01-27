@@ -24,7 +24,7 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
       <td className="px-4 py-4 align-middle text-sm font-semibold text-slate-900">{device.device_name}</td>
       <td className="px-4 py-4 align-middle">
         <Badge variant={statusVariant(device.status)}>
-          {device.status?.toLowerCase() === 'active' ? 'Online' : device.status ?? 'Unknown'}
+          {device.active ? 'Alert ON' : 'Alert OFF'}
         </Badge>
         {device.last_seen && (
           <p className="mt-1 text-xs text-slate-400">Last seen {dayjs(device.last_seen).format('MMM D, YYYY HH:mm')}</p>
