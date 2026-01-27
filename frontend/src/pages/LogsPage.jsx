@@ -52,7 +52,7 @@ const normalizeSocketLog = (data) => {
       payload.destination_ip ??
       payload['destination ip'] ??
       payload['destination-ip'],
-    type: payload.type ?? payload.attack_type ?? payload.event_type ?? 'Unknown',
+    type: payload.alert_msg ?? payload.type ?? payload.attack_type ?? payload.event_type ?? 'Unknown',
     description:
       payload.description ??
       payload.detail ??
@@ -359,7 +359,7 @@ const LogsPage = () => {
                 <th className="px-4 py-3">Device</th>
                 <th className="px-4 py-3">Severity</th>
                 <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3 text-right">Status</th>
+                <th className="px-4 py-3 text-right">Alert IP</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -401,9 +401,18 @@ const LogsPage = () => {
                       </td>
                       <td className="px-4 py-3 text-slate-600">{log.type}</td>
                       <td className="px-4 py-3 text-right">
-                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${statusClass}`}>
-                          {isBlocked ? 'Blocked' : 'Not blocked'}
-                        </span>
+                        <div className="flex flex-col items-end gap-1 text-xs text-slate-600">
+                          <span className="font-semibold text-slate-700">
+                            {log.source_ip || log.destination_ip || '--'}
+                          </span>
+                          {isBlocked && (
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusClass}`}
+                            >
+                              Blocked
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )

@@ -54,7 +54,7 @@ def _serialize_log(log: Log) -> dict:
     payload = log.payload or {}
     device_name = log.device.name if log.device else _derive_field(payload, "device_name", "device")
 
-    event_type = _derive_field(payload, "type", "attack_type", "event_type", default="Unknown")
+    event_type = _derive_field(payload, "alert_msg", "type", "attack_type", "event_type", default="Unknown")
     description = _derive_field(
         payload,
         "description",
