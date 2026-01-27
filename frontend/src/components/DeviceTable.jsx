@@ -16,6 +16,7 @@ const DeviceTable = ({
   onToggleActive,
   onDelete,
   onReregister,
+  onRename,
   togglingId,
   showHeader = true,
   withContainer = true,
@@ -117,6 +118,7 @@ const DeviceTable = ({
                   onToggleActive={onToggleActive}
                   onDelete={onDelete}
                   onReregister={onReregister}
+                  onRename={onRename}
                   toggling={togglingId === device.id}
                 />
               ))}

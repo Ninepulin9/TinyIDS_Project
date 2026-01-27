@@ -8,7 +8,7 @@ const statusVariant = (status) => {
   return status.toLowerCase() === 'connected' || status.toLowerCase() === 'online' ? 'success' : 'danger'
 }
 
-const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, onReregister, toggling = false }) => {
+const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, onReregister, onRename, toggling = false }) => {
   const handleToggle = () => {
     onToggleActive?.(device)
   }
@@ -17,6 +17,9 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
   }
   const handleReregister = () => {
     onReregister?.(device)
+  }
+  const handleRename = () => {
+    onRename?.(device)
   }
 
   return (
@@ -49,6 +52,14 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
         />
       </td>
       <td className="px-4 py-4 align-middle text-right pr-6 whitespace-nowrap">
+        <Button
+          type="button"
+          variant="ghost"
+          className="mr-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          onClick={handleRename}
+        >
+          Rename
+        </Button>
         <Button
           type="button"
           variant="ghost"

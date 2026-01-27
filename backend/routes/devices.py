@@ -140,6 +140,22 @@ def update_active(device_id: int):
     return jsonify(_serialize_device(device))
 
 
+@devices_bp.route("/<int:device_id>", methods=["PATCH"])
+@jwt_required()
+def update_device(device_id: int):
+    device = _get_device_or_404(device_id)
+    payload = request.get_json(force=True) or {}
+    name = payload.get("device_name") or payload.get("name")
+    if name is None:
+        return jsonify({"message": "device_name is required"}), HTTPStatus.BAD_REQUEST
+    name = str(name).strip()
+    if not name:
+        return jsonify({"message": "device_name is required"}), HTTPStatus.BAD_REQUEST
+    device.name = name
+    db.session.commit()
+    return jsonify(_serialize_device(device))
+
+
 @devices_bp.route("/<int:device_id>", methods=["DELETE"])
 @jwt_required()
 def delete_device(device_id: int):

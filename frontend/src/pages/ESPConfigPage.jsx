@@ -198,6 +198,29 @@ const ESPConfigPage = () => {
     setReregisterTarget(device)
   }
 
+  const handleRenameDevice = async (device) => {
+    if (!device?.id) return
+    const currentName = device.device_name ?? device.name ?? ''
+    const nextName = window.prompt('Enter device name', currentName)
+    if (nextName == null) return
+    const trimmed = nextName.trim()
+    if (!trimmed) {
+      toast.error('Device name is required.')
+      return
+    }
+    try {
+      const { data } = await api.patch(`/api/devices/${device.id}`, { device_name: trimmed })
+      setDevices((prev) => prev.map((item) => (item.id === device.id ? { ...item, ...data } : item)))
+      toast.success('Device name updated')
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ??
+        err?.message ??
+        'Unable to update device name. Please try again.'
+      toast.error(message)
+    }
+  }
+
   const confirmReregisterDevice = async () => {
     const device = reregisterTarget
     if (!device?.id) return
@@ -263,6 +286,7 @@ const ESPConfigPage = () => {
           onToggleActive={handleToggleActive}
           onDelete={handleDeleteDevice}
           onReregister={handleReregisterDevice}
+          onRename={handleRenameDevice}
           togglingId={togglingId}
           withContainer={false}
         />
