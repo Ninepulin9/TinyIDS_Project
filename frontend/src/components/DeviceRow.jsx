@@ -46,7 +46,7 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
           label={`Toggle ${device.device_name} active`}
         />
       </td>
-      <td className="px-4 py-4 align-middle text-right">
+      <td className="px-4 py-4 align-middle text-right pr-6 whitespace-nowrap">
         <Button
           type="button"
           variant="ghost"

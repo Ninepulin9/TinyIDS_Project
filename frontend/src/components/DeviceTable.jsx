@@ -54,7 +54,7 @@ const DeviceTable = ({
               <th className="px-4 py-3 hidden">Wi-Fi</th>
               <th className="px-4 py-3 hidden">MQTT</th>
               <th className="px-4 py-3">Active</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="px-4 py-3 text-right pr-6">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
