@@ -179,6 +179,9 @@ const RuleManagementPage = () => {
       token: device?.token ?? '',
     }))
     setLoadingRules(false)
+    if (device?.token) {
+      handleLoadFromDevice()
+    }
   }
 
   const closeDrawer = () => {
