@@ -1,7 +1,6 @@
 import dayjs from 'dayjs'
 import Badge from './ui/Badge.jsx'
 import Toggle from './ui/Toggle.jsx'
-import Button from './ui/Button.jsx'
 
 const statusVariant = (status) => {
   if (!status) return 'muted'
@@ -18,13 +17,16 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
   const handleReregister = () => {
     onReregister?.(device)
   }
-  const handleRename = () => {
-    onRename?.(device)
-  }
 
   return (
     <tr className="border-b border-slate-100 last:border-none hover:bg-slate-50/70 transition">
-      <td className="px-4 py-4 align-middle text-sm font-semibold text-slate-900">{device.device_name}</td>
+      <td
+        className="px-4 py-4 align-middle text-sm font-semibold text-slate-900"
+        onDoubleClick={() => onRename?.(device)}
+        title="Double click to rename"
+      >
+        {device.device_name}
+      </td>
       <td className="px-4 py-4 align-middle">
         <Badge variant={statusVariant(device.status)}>
           {device.active ? 'Alert ON' : 'Alert OFF'}
@@ -52,30 +54,20 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
         />
       </td>
       <td className="px-4 py-4 align-middle text-right pr-6 whitespace-nowrap">
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          className="mr-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-          onClick={handleRename}
-        >
-          Rename
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
           className="mr-2 rounded-full border border-sky-500 bg-white px-4 py-2 text-xs font-semibold text-sky-600 transition hover:bg-sky-50 hover:text-sky-700"
           onClick={handleReregister}
         >
           Re-register
-        </Button>
-        <Button
+        </button>
+        <button
           type="button"
-          variant="ghost"
           className="rounded-full border border-rose-500 bg-white px-4 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
           onClick={handleDelete}
         >
           Delete
-        </Button>
+        </button>
       </td>
     </tr>
   )
