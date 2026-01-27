@@ -52,7 +52,8 @@ const normalizeSocketLog = (data) => {
       payload.destination_ip ??
       payload['destination ip'] ??
       payload['destination-ip'],
-    type: payload.alert_msg ?? payload.type ?? payload.attack_type ?? payload.event_type ?? 'Unknown',
+    type: payload.type ?? payload.attack_type ?? payload.event_type ?? 'Unknown',
+    alert_msg: payload.alert_msg ?? payload.message ?? payload.summary ?? payload.alert ?? '',
     description:
       payload.description ??
       payload.detail ??
@@ -357,6 +358,7 @@ const LogsPage = () => {
               <tr>
                 <th className="px-4 py-3">Timestamp</th>
                 <th className="px-4 py-3">Device</th>
+                <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Alert Message</th>
                 <th className="px-4 py-3 text-right">Alert IP</th>
               </tr>
@@ -364,19 +366,19 @@ const LogsPage = () => {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan="4" className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan="5" className="px-4 py-6 text-center text-sm text-slate-500">
                     Loading intrusion logs...
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan="4" className="px-4 py-6 text-center text-sm text-rose-500">
+                  <td colSpan="5" className="px-4 py-6 text-center text-sm text-rose-500">
                     {error}
                   </td>
                 </tr>
               ) : pagedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan="5" className="px-4 py-10 text-center text-sm text-slate-500">
                     No intrusion events match the current search.
                   </td>
                 </tr>
@@ -392,6 +394,7 @@ const LogsPage = () => {
                       <td className="px-4 py-3 font-medium text-slate-700">{formatTimestamp(log.timestamp)}</td>
                       <td className="px-4 py-3 text-slate-600">{log.device_name}</td>
                       <td className="px-4 py-3 text-slate-600">{log.type}</td>
+                      <td className="px-4 py-3 text-slate-600">{log.alert_msg || '--'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1 text-xs text-slate-600">
                           <span className="font-semibold text-slate-700">
