@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Filter, ShieldAlert, Search } from 'lucide-react'
+import { Filter, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
@@ -23,6 +23,8 @@ const BlacklistPage = () => {
   const [deletingId, setDeletingId] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [page, setPage] = useState(1)
+  const pageSize = 15
 
   const normalizeBlockedList = (value) => {
     if (Array.isArray(value)) {
@@ -105,10 +107,21 @@ const BlacklistPage = () => {
     if (!query.trim()) return entries
     const needle = query.trim().toLowerCase()
     return entries.filter((entry) => {
-                      <td className="px-6 py-3 text-slate-600">{entry.reason ?? '--'}</td>
+      const haystack = `${entry.device_name ?? ''} ${entry.ip_address ?? ''}`.toLowerCase()
       return haystack.includes(needle)
     })
   }, [entries, query])
+
+  useEffect(() => {
+    setPage(1)
+  }, [query, filteredEntries.length])
+
+  const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize))
+  const pageSafe = Math.min(page, totalPages)
+  const pagedEntries = useMemo(() => {
+    const start = (pageSafe - 1) * pageSize
+    return filteredEntries.slice(start, start + pageSize)
+  }, [filteredEntries, pageSafe])
 
   const handleDelete = async (id) => {
     if (!id) return
@@ -137,28 +150,21 @@ const BlacklistPage = () => {
   }
 
   const activeBlocks = filteredEntries.length
-  const lastUpdatedLabel = lastUpdated ? new Date(lastUpdated).toLocaleString() : '—'
+  const lastUpdatedLabel = lastUpdated ? new Date(lastUpdated).toLocaleString() : '--'
 
   return (
     <div className="space-y-6 text-slate-900" style={{ colorScheme: 'light' }}>
-      <header className="flex flex-col gap-4 rounded-3xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-6 text-white shadow-lg">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <header className="rounded-3xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-7 text-white shadow-lg">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-3xl font-semibold sm:text-4xl">Blacklist</h1>
-            <p className="text-sm text-white/80">Manage blocked IP addresses .</p>
+            <p className="mt-1 text-sm text-white/80">
+              Manage blocked IP addresses for TinyIDS. Last update: {lastUpdatedLabel}
+            </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-white shadow-inner backdrop-blur">
-              <ShieldAlert className="h-8 w-8 text-rose-200" />
-              <div>
-                <p className="text-xs uppercase tracking-wide text-white/70">Active Blocks</p>
-                <p className="text-2xl font-semibold">{activeBlocks}</p>
-              </div>
-            </div>
-            <div className="rounded-2xl bg-white/15 px-4 py-3 text-sm text-white shadow-inner backdrop-blur">
-              <p className="text-xs uppercase tracking-wide text-white/70">Last Update</p>
-              <p className="text-lg font-semibold">{lastUpdatedLabel}</p>
-            </div>
+          <div className="rounded-2xl bg-white/10 px-4 py-2 text-sm font-medium backdrop-blur">
+            Total blocked IPs:{' '}
+            <span className="font-semibold text-white">{loading ? '--' : activeBlocks}</span>
           </div>
         </div>
       </header>
@@ -166,30 +172,30 @@ const BlacklistPage = () => {
       <section className="rounded-3xl bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:max-w-md">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search by IP address..."
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-3 text-sm text-slate-700 transition focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 transition focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100"
             />
           </div>
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-indigo-300 hover:text-indigo-600"
+              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-300 hover:text-sky-500"
+              aria-label="Filter blacklist"
             >
               <Filter className="h-4 w-4" />
-              Filters
             </button>
             <button
               type="button"
               onClick={handleRefresh}
               disabled={loading || refreshing}
-              className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <span>{refreshing ? 'Refreshing…' : 'Refresh'}</span>
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
             </button>
           </div>
         </div>
@@ -213,11 +219,11 @@ const BlacklistPage = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredEntries.map((entry) => (
+                  {pagedEntries.map((entry) => (
                     <tr key={entry.id} className="hover:bg-slate-50/70">
                       <td className="px-6 py-3 text-slate-600">{formatTimestamp(entry.created_at)}</td>
                       <td className="px-6 py-3 font-medium text-slate-900">{entry.device_name ?? 'Unknown'}</td>
-                      <td className="px-6 py-3 text-slate-700">{entry.ip_address}</td>
+                      <td className="px-6 py-3 font-semibold text-slate-700">{entry.ip_address}</td>
                       <td className="px-6 py-3 text-right">
                         {entry.readOnly ? (
                           <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">
@@ -242,6 +248,32 @@ const BlacklistPage = () => {
             </div>
           )}
         </div>
+
+        {filteredEntries.length > 0 && (
+          <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
+            <span>
+              Page {pageSafe} of {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={pageSafe <= 1}
+                className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={pageSafe >= totalPages}
+                className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   )
