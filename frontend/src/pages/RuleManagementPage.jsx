@@ -379,7 +379,7 @@ const RuleManagementPage = () => {
   }, [awaitingToken])
 
   const renderStatus = (device) => {
-    const online = (device.status ?? '').toLowerCase() === 'online'
+    const online = device?.active === true || (device.status ?? '').toLowerCase() === 'online'
     return (
       <span
         className={`rounded-full px-3 py-1 text-xs font-semibold ${
