@@ -24,11 +24,68 @@ const BlacklistPage = () => {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
 
+  const normalizeBlockedList = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item).trim()).filter(Boolean)
+    }
+    if (value == null) return []
+    return String(value)
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
   const loadBlacklist = useCallback(async () => {
     setLoading(true)
     try {
       const { data } = await api.get('/api/blacklist')
-      setEntries(Array.isArray(data) ? data : [])
+      const baseEntries = Array.isArray(data) ? data : []
+      let mergedEntries = [...baseEntries]
+
+      try {
+        const devicesResponse = await api.get('/api/devices')
+        const deviceList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
+        const tokenDevices = deviceList.filter((device) => device?.token)
+
+        if (tokenDevices.length) {
+          const settingsResults = await Promise.allSettled(
+            tokenDevices.map((device) => api.get(`/api/devices/${device.id}/settings/latest`)),
+          )
+          const seenIps = new Set(
+            baseEntries.map((entry) => String(entry.ip_address ?? '').trim().toLowerCase()).filter(Boolean),
+          )
+          const settingsEntries = []
+
+          settingsResults.forEach((result, idx) => {
+            if (result.status !== 'fulfilled') return
+            const payload = result.value?.data
+            if (!payload || typeof payload !== 'object') return
+            const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
+            const ips = normalizeBlockedList(blocked)
+            if (!ips.length) return
+            const device = tokenDevices[idx]
+            ips.forEach((ip) => {
+              const key = ip.toLowerCase()
+              if (seenIps.has(key)) return
+              seenIps.add(key)
+              settingsEntries.push({
+                id: `settings-${device.id}-${key}`,
+                device_name: device.device_name ?? device.name ?? 'ESP32',
+                ip_address: ip,
+                reason: 'ESP settings',
+                created_at: payload.time ?? payload.timestamp ?? new Date().toISOString(),
+                readOnly: true,
+              })
+            })
+          })
+
+          mergedEntries = [...baseEntries, ...settingsEntries]
+        }
+      } catch {
+        // ignore settings fetch errors and show stored blacklist
+      }
+
+      setEntries(mergedEntries)
       setLastUpdated(new Date().toISOString())
     } catch (err) {
       const message =
@@ -48,7 +105,7 @@ const BlacklistPage = () => {
     if (!query.trim()) return entries
     const needle = query.trim().toLowerCase()
     return entries.filter((entry) => {
-      const haystack = `${entry.device_name ?? ''} ${entry.ip_address ?? ''}`.toLowerCase()
+      const haystack = `${entry.device_name ?? ''} ${entry.ip_address ?? ''} ${entry.reason ?? ''}`.toLowerCase()
       return haystack.includes(needle)
     })
   }, [entries, query])
@@ -164,15 +221,21 @@ const BlacklistPage = () => {
                       <td className="px-6 py-3 text-slate-700">{entry.ip_address}</td>
                       <td className="px-6 py-3 text-slate-600">{entry.reason ?? '—'}</td>
                       <td className="px-6 py-3 text-right">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="rounded-full border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60"
-                        disabled={deletingId === entry.id}
-                        onClick={() => handleDelete(entry.id)}
-                      >
-                        {deletingId === entry.id ? 'Deleting…' : 'Delete'}
-                      </Button>
+                        {entry.readOnly ? (
+                          <span className=\"inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500\">
+                            From device
+                          </span>
+                        ) : (
+                          <Button
+                            type=\"button\"
+                            variant=\"ghost\"
+                            className=\"rounded-full border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60\"
+                            disabled={deletingId === entry.id}
+                            onClick={() => handleDelete(entry.id)}
+                          >
+                            {deletingId === entry.id ? 'Deleting???' : 'Delete'}
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
