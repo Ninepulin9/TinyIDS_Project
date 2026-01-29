@@ -423,11 +423,15 @@ const LogsPage = () => {
                   const statusClass = isBlocked
                     ? statusStyles.blocked
                     : statusStyles.allowed ?? 'bg-slate-100 text-slate-600 ring-slate-200'
+                  const typeLabel = String(log.type ?? '')
+                  const isSettings = typeLabel.trim().toLowerCase() === 'esp settings'
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/70">
                       <td className="px-4 py-3 font-medium text-slate-700">{formatTimestamp(log.timestamp)}</td>
                       <td className="px-4 py-3 text-slate-600">{log.device_name}</td>
-                      <td className="px-4 py-3 font-semibold text-rose-600">{log.type}</td>
+                      <td className={`px-4 py-3 font-semibold ${isSettings ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {typeLabel || 'Unknown'}
+                      </td>
                       <td className="px-4 py-3 text-slate-600">{log.alert_msg || '--'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1 text-xs text-slate-600">
