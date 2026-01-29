@@ -403,9 +403,7 @@ const LogsPage = () => {
                       <td className="px-4 py-3 text-slate-600">{log.alert_msg || '--'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1 text-xs text-slate-600">
-                          <span className="font-semibold text-slate-700">
-                            {log.source_ip || log.destination_ip || '--'}
-                          </span>
+                          <span className="font-semibold text-slate-700">{log.source_ip || '--'}</span>
                           {isBlocked && (
                             <span
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${statusClass}`}

@@ -4,10 +4,11 @@ from http import HTTPStatus
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
+from sqlalchemy import delete
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from models import Device, DeviceNetworkProfile, DeviceToken
+from models import Device, DeviceNetworkProfile, DeviceToken, Log
 from services.mqtt_service import mqtt_service
 
 
@@ -160,7 +161,11 @@ def update_device(device_id: int):
 @jwt_required()
 def delete_device(device_id: int):
     device = _get_device_or_404(device_id)
-    db.session.delete(device)
+    # Use core deletes to avoid ORM nulling device_id on logs.
+    db.session.execute(delete(Log).where(Log.device_id == device.id))
+    db.session.execute(delete(DeviceToken).where(DeviceToken.device_id == device.id))
+    db.session.execute(delete(DeviceNetworkProfile).where(DeviceNetworkProfile.device_id == device.id))
+    db.session.execute(delete(Device).where(Device.id == device.id))
     db.session.commit()
     return jsonify({"status": "deleted", "id": device_id})
 
