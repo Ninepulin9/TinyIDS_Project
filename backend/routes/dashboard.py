@@ -36,6 +36,7 @@ def _filtered_logs(user_id, device_id=None, mac_address=None):
 def _serialize_device(device, attack_counts):
     profile = device.network_profile
     last_seen = None
+    token_value = device.token.token if device.token else None
 
     if profile and profile.last_seen:
         if profile.last_seen.tzinfo is None:
@@ -51,6 +52,7 @@ def _serialize_device(device, attack_counts):
         "active": bool(device.is_active),
         "last_seen": last_seen,
         "attackCount": attack_counts.get(device.id, 0),
+        "token": token_value,
     }
 
 
