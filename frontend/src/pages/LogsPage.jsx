@@ -89,6 +89,7 @@ const LogsPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tokenDeviceIds, setTokenDeviceIds] = useState(new Set())
+  const [tokenValues, setTokenValues] = useState(new Set())
   const [devicesLoaded, setDevicesLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [timeframeDays, setTimeframeDays] = useState(30)
@@ -149,8 +150,11 @@ const LogsPage = () => {
       const { data } = await api.get('/api/devices')
       if (!isMountedRef.current) return
       const list = Array.isArray(data) ? data : []
-      const ids = new Set(list.filter((device) => device?.token).map((device) => device.id))
+      const tokenDevices = list.filter((device) => device?.token)
+      const ids = new Set(tokenDevices.map((device) => device.id))
+      const tokens = new Set(tokenDevices.map((device) => String(device.token)))
       setTokenDeviceIds(ids)
+      setTokenValues(tokens)
       setDevicesLoaded(true)
     } catch {
       if (!isMountedRef.current) return
@@ -197,10 +201,12 @@ const LogsPage = () => {
       const ts = dayjs(log.timestamp)
       const withinWindow = ts.isValid() ? ts.isAfter(cutoff) : true
       if (!withinWindow) return false
-      if (!devicesLoaded || tokenDeviceIds.size === 0) return true
-      return tokenDeviceIds.has(log.device_id)
+      if (!devicesLoaded || (tokenDeviceIds.size === 0 && tokenValues.size === 0)) return true
+      if (tokenDeviceIds.has(log.device_id)) return true
+      const payloadToken = log?.payload?.token ? String(log.payload.token) : ''
+      return payloadToken ? tokenValues.has(payloadToken) : false
     })
-  }, [logs, timeframeDays, devicesLoaded, tokenDeviceIds])
+  }, [logs, timeframeDays, devicesLoaded, tokenDeviceIds, tokenValues])
 
   const filteredLogs = useMemo(() => {
     if (!query.trim()) {
