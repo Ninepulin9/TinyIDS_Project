@@ -176,8 +176,9 @@ const Dashboard = () => {
     setSelectedDeviceId(event.target.value)
   }
 
+  const devicesWithToken = useMemo(() => devices.filter((device) => device?.token), [devices])
   const aggregatedOnline = metrics.devicesOnline ?? Math.floor((metrics.totals?.deviceActivity ?? 0) / 10)
-  const totalDevices = metrics.deviceCount ?? Math.max(aggregatedOnline, devices.length)
+  const totalDevices = metrics.deviceCount ?? Math.max(aggregatedOnline, devicesWithToken.length)
   const nodesOnline = selectedDevice ? (selectedDevice.active ? 1 : 0) : aggregatedOnline
   const nodesDisplay = selectedDevice ? (selectedDevice.active ? 'Online' : 'Offline') : `${nodesOnline}/${totalDevices}`
   const alertsTriggered = metrics.totals?.alertsTriggered ?? 0
@@ -285,7 +286,7 @@ const Dashboard = () => {
                   }}
                 >
                   <option value="all">All Devices</option>
-                  {devices.map((device) => (
+                  {devicesWithToken.map((device) => (
                     <option key={device.id} value={String(device.id)}>
                     {device.device_name ?? `Device ${device.id}`}
                     {device.mac_address ? ` (${device.mac_address})` : ''}

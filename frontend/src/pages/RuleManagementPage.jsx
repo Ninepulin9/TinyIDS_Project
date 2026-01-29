@@ -153,7 +153,7 @@ const RuleManagementPage = () => {
     try {
       const { data } = await api.get('/api/devices')
       const list = Array.isArray(data) ? data : []
-      setDevices(list)
+      setDevices(list.filter((device) => device?.token))
     } catch (err) {
       const message =
         err?.response?.data?.message ?? err?.message ?? 'Unable to load devices. Please try again.'

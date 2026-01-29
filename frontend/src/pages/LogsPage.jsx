@@ -88,6 +88,8 @@ const LogsPage = () => {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [tokenDeviceIds, setTokenDeviceIds] = useState(new Set())
+  const [devicesLoaded, setDevicesLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [timeframeDays, setTimeframeDays] = useState(30)
   const [blacklistSet, setBlacklistSet] = useState(new Set())
@@ -142,10 +144,25 @@ const LogsPage = () => {
     [],
   )
 
+  const fetchDevices = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/devices')
+      if (!isMountedRef.current) return
+      const list = Array.isArray(data) ? data : []
+      const ids = new Set(list.filter((device) => device?.token).map((device) => device.id))
+      setTokenDeviceIds(ids)
+      setDevicesLoaded(true)
+    } catch {
+      if (!isMountedRef.current) return
+      setDevicesLoaded(true)
+    }
+  }, [])
+
   useEffect(() => {
     isMountedRef.current = true
     fetchLatest({ silent: false })
     fetchBlacklist()
+    fetchDevices()
     pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 4000)
     return () => {
       isMountedRef.current = false
@@ -166,19 +183,24 @@ const LogsPage = () => {
     }
 
     socket.on('log:new', handleLogNew)
+    socket.on('device:registered', fetchDevices)
     return () => {
       socket.off('log:new', handleLogNew)
+      socket.off('device:registered', fetchDevices)
     }
-  }, [])
+  }, [fetchDevices])
 
   const timeFilteredLogs = useMemo(() => {
     const windowDays = Number(timeframeDays) || 30
     const cutoff = dayjs().subtract(windowDays, 'day')
     return logs.filter((log) => {
       const ts = dayjs(log.timestamp)
-      return ts.isValid() ? ts.isAfter(cutoff) : true
+      const withinWindow = ts.isValid() ? ts.isAfter(cutoff) : true
+      if (!withinWindow) return false
+      if (!devicesLoaded || tokenDeviceIds.size === 0) return true
+      return tokenDeviceIds.has(log.device_id)
     })
-  }, [logs, timeframeDays])
+  }, [logs, timeframeDays, devicesLoaded, tokenDeviceIds])
 
   const filteredLogs = useMemo(() => {
     if (!query.trim()) {
