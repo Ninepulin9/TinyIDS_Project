@@ -98,9 +98,10 @@ const ESPConfigPage = () => {
   }, [devices, pingDevices, fetchDevices])
 
   const filteredDevices = useMemo(() => {
-    if (!query.trim()) return devices
+    const withToken = devices.filter((device) => device?.token)
+    if (!query.trim()) return withToken
     const needle = query.trim().toLowerCase()
-    return devices.filter((device) => {
+    return withToken.filter((device) => {
       const haystack = [device.device_name, device.ip_address, device.status]
         .filter(Boolean)
         .join(' ')
