@@ -105,7 +105,7 @@ const BlacklistPage = () => {
     if (!query.trim()) return entries
     const needle = query.trim().toLowerCase()
     return entries.filter((entry) => {
-      const haystack = `${entry.device_name ?? ''} ${entry.ip_address ?? ''} ${entry.reason ?? ''}`.toLowerCase()
+                      <td className="px-6 py-3 text-slate-600">{entry.reason ?? '--'}</td>
       return haystack.includes(needle)
     })
   }, [entries, query])
@@ -219,21 +219,21 @@ const BlacklistPage = () => {
                       <td className="px-6 py-3 text-slate-600">{formatTimestamp(entry.created_at)}</td>
                       <td className="px-6 py-3 font-medium text-slate-900">{entry.device_name ?? 'Unknown'}</td>
                       <td className="px-6 py-3 text-slate-700">{entry.ip_address}</td>
-                      <td className="px-6 py-3 text-slate-600">{entry.reason ?? '—'}</td>
+                      <td className="px-6 py-3 text-slate-600">{entry.reason ?? '--'}</td>
                       <td className="px-6 py-3 text-right">
                         {entry.readOnly ? (
-                          <span className=\"inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500\">
+                          <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">
                             From device
                           </span>
                         ) : (
                           <Button
-                            type=\"button\"
-                            variant=\"ghost\"
-                            className=\"rounded-full border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60\"
+                            type="button"
+                            variant="ghost"
+                            className="rounded-full border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60"
                             disabled={deletingId === entry.id}
                             onClick={() => handleDelete(entry.id)}
                           >
-                            {deletingId === entry.id ? 'Deleting???' : 'Delete'}
+                            {deletingId === entry.id ? 'Deleting...' : 'Delete'}
                           </Button>
                         )}
                       </td>
