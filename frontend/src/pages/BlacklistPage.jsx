@@ -209,7 +209,6 @@ const BlacklistPage = () => {
                     <th className="px-6 py-3">Time stamp</th>
                     <th className="px-6 py-3">Device</th>
                     <th className="px-6 py-3">IP Address</th>
-                    <th className="px-6 py-3">Type</th>
                     <th className="px-6 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -219,7 +218,6 @@ const BlacklistPage = () => {
                       <td className="px-6 py-3 text-slate-600">{formatTimestamp(entry.created_at)}</td>
                       <td className="px-6 py-3 font-medium text-slate-900">{entry.device_name ?? 'Unknown'}</td>
                       <td className="px-6 py-3 text-slate-700">{entry.ip_address}</td>
-                      <td className="px-6 py-3 text-slate-600">{entry.reason ?? '--'}</td>
                       <td className="px-6 py-3 text-right">
                         {entry.readOnly ? (
                           <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">
