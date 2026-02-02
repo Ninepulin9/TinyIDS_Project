@@ -23,11 +23,13 @@ class MQTTService:
         self.fallback_topics: set[str] = set()
         self.discovery_topic = "esp/Entrance"
         self.discovery_interval = 0
+        self.settings_poll_interval = 0
         self.allow_reregister = True
         self.reregister_once: set[str] = set()
         self.pending_nonces: dict[str, float] = {}
         self.pending_lock = threading.Lock()
         self.discovery_thread_started = False
+        self.settings_poll_thread_started = False
         self.latest_settings: dict[str, dict] = {}
 
     def init_app(self, app) -> None:
@@ -51,6 +53,7 @@ class MQTTService:
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.discovery_interval = int(app.config.get("MQTT_DISCOVERY_INTERVAL", 0) or 0)
+        self.settings_poll_interval = int(app.config.get("MQTT_SETTINGS_POLL_INTERVAL", 0) or 0)
         self.allow_reregister = bool(app.config.get("MQTT_ALLOW_REREGISTER", True))
         self.topics = self._resolve_topics()
         self.fallback_topics = {
@@ -72,6 +75,7 @@ class MQTTService:
 
         threading.Thread(target=_runner, daemon=True).start()
         self._start_discovery_loop()
+        self._start_settings_poll()
 
     def _resolve_topics(self) -> list[str]:
         raw_topics = self.app.config.get("MQTT_TOPICS") if self.app else None
@@ -90,6 +94,9 @@ class MQTTService:
                 "esp/esp/entrance",
             ]
         normalized = {topic.lower() for topic in topics if topic}
+        if any(topic.startswith("esp/") for topic in normalized):
+            if "esp/#" not in normalized:
+                topics.append("esp/#")
         if normalized and normalized.issubset({"esp/alert", "esp/setting/now", "esp/alive"}):
             return ["esp/#"]
         return topics
@@ -325,6 +332,33 @@ class MQTTService:
                     if self.app:
                         self.app.logger.exception("Discovery loop error: %s", exc)
                 time.sleep(self.discovery_interval)
+
+        threading.Thread(target=_loop, daemon=True).start()
+
+    def _start_settings_poll(self) -> None:
+        if self.settings_poll_thread_started or self.settings_poll_interval <= 0:
+            return
+        self.settings_poll_thread_started = True
+
+        def _loop():
+            while True:
+                try:
+                    if self.client and self.client.is_connected():
+                        with self.app.app_context():
+                            tokens = (
+                                db.session.query(DeviceToken.token)
+                                .join(Device, Device.id == DeviceToken.device_id)
+                                .all()
+                            )
+                        for (token_value,) in tokens:
+                            if not token_value:
+                                continue
+                            topic = f"esp/setting/Control-{token_value}"
+                            self.client.publish(topic, f"showsetting-{token_value}", qos=0, retain=False)
+                except Exception as exc:  # noqa: BLE001
+                    if self.app:
+                        self.app.logger.exception("Settings poll error: %s", exc)
+                time.sleep(self.settings_poll_interval)
 
         threading.Thread(target=_loop, daemon=True).start()
 

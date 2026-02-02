@@ -16,6 +16,7 @@ services:
       - MQTT_TLS_CA_CERTS=/certs/mosquitto.org.crt
       - MQTT_TLS_INSECURE=false
       - MQTT_DISCOVERY_INTERVAL=5
+      - MQTT_SETTINGS_POLL_INTERVAL=10
       - ALLOWED_ORIGIN=*
       - CORS_ORIGINS=*
     ports:

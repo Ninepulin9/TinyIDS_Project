@@ -3,6 +3,7 @@ import { Filter, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
+import { getSocket } from '../lib/socket'
 import Button from '../components/ui/Button.jsx'
 
 const formatTimestamp = (value) => {
@@ -105,6 +106,22 @@ const BlacklistPage = () => {
 
   useEffect(() => {
     loadBlacklist()
+  }, [loadBlacklist])
+
+  useEffect(() => {
+    const socket = getSocket()
+    const handleLogNew = (payload) => {
+      const data = payload?.payload ?? payload
+      if (!data || typeof data !== 'object') return
+      const topic = String(data._mqtt_topic ?? '').toLowerCase()
+      if (topic === 'esp/setting/now') {
+        loadBlacklist()
+      }
+    }
+    socket.on('log:new', handleLogNew)
+    return () => {
+      socket.off('log:new', handleLogNew)
+    }
   }, [loadBlacklist])
 
   const filteredEntries = useMemo(() => {
