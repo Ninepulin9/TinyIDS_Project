@@ -44,10 +44,31 @@ const BlacklistPage = () => {
     setLoading(true)
     try {
       const { data } = await api.get('/api/blacklist')
-      const baseEntries = Array.isArray(data) ? data : []
+      let baseEntries = Array.isArray(data) ? data : []
       let mergedEntries = [...baseEntries]
 
       try {
+        const logsResponse = await api.get('/api/logs')
+        const logs = Array.isArray(logsResponse.data) ? logsResponse.data : []
+        const ipToDevice = new Map()
+        logs.forEach((log) => {
+          const ip = String(log.source_ip ?? '').trim()
+          const name = log.device_name
+          if (ip && name && !ipToDevice.has(ip)) {
+            ipToDevice.set(ip, name)
+          }
+        })
+        baseEntries = baseEntries.map((entry) => {
+          const ip = String(entry.ip_address ?? '').trim()
+          if (!ip) return entry
+          const name = ipToDevice.get(ip)
+          if (!name) return entry
+          if (!entry.device_name || entry.device_name === 'Unknown') {
+            return { ...entry, device_name: name }
+          }
+          return entry
+        })
+
         const devicesResponse = await api.get('/api/devices')
         const deviceList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
         const tokenDevices = deviceList.filter((device) => device?.token)
@@ -326,15 +347,14 @@ const BlacklistPage = () => {
                             Unblock
                           </button>
                         ) : (
-                          <Button
+                          <button
                             type="button"
-                            variant="ghost"
                             className="rounded-full border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60"
                             disabled={deletingId === entry.id}
                             onClick={() => handleDelete(entry.id)}
                           >
                             {deletingId === entry.id ? 'Deleting...' : 'Delete'}
-                          </Button>
+                          </button>
                         )}
                       </td>
                     </tr>
