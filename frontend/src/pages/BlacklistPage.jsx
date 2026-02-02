@@ -40,6 +40,19 @@ const BlacklistPage = () => {
       .filter(Boolean)
   }
 
+  const fetchSettingsWithRetry = async (deviceId, attempts = 5, delayMs = 500) => {
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        const { data } = await api.get(`/api/devices/${deviceId}/settings/latest`)
+        if (data && typeof data === 'object') return data
+      } catch {
+        // ignore and retry
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+    return null
+  }
+
   const loadBlacklist = useCallback(async () => {
     setLoading(true)
     try {
@@ -84,10 +97,9 @@ const BlacklistPage = () => {
               }),
             ),
           )
-          await new Promise((resolve) => setTimeout(resolve, 600))
 
           const settingsResults = await Promise.allSettled(
-            tokenDevices.map((device) => api.get(`/api/devices/${device.id}/settings/latest`)),
+            tokenDevices.map((device) => fetchSettingsWithRetry(device.id)),
           )
           const seenIps = new Set(
             baseEntries.map((entry) => String(entry.ip_address ?? '').trim().toLowerCase()).filter(Boolean),
@@ -97,7 +109,7 @@ const BlacklistPage = () => {
 
           settingsResults.forEach((result, idx) => {
             if (result.status !== 'fulfilled') return
-            const payload = result.value?.data
+            const payload = result.value
             if (!payload || typeof payload !== 'object') return
             const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
             const ips = normalizeBlockedList(blocked)
