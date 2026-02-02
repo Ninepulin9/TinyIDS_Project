@@ -220,6 +220,8 @@ const LogsPage = () => {
         log.severity,
         log.type,
         log.description,
+        log.source_ip,
+        log.destination_ip,
         dayjs(log.timestamp).format('MMM D YYYY HH:mm'),
       ]
         .join(' ')
