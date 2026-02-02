@@ -394,8 +394,8 @@ const LogsPage = () => {
                 <th className="px-4 py-3">Device</th>
                 <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Alert Message</th>
-                <th className="px-4 py-3">Block</th>
                 <th className="px-4 py-3 text-right">Alert IP</th>
+                <th className="px-4 py-3 text-right">Block Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -434,15 +434,6 @@ const LogsPage = () => {
                         {typeLabel || 'Unknown'}
                       </td>
                       <td className="px-4 py-3 text-slate-600">{log.alert_msg || '--'}</td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${
-                            isBlocked ? 'bg-rose-100 text-rose-700 ring-rose-200' : 'bg-slate-100 text-slate-600 ring-slate-200'
-                          }`}
-                        >
-                          {isBlocked ? 'Blocked' : 'Open'}
-                        </span>
-                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1 text-xs text-slate-600">
                           <span className="font-semibold text-slate-700">{log.source_ip || '--'}</span>
@@ -454,6 +445,15 @@ const LogsPage = () => {
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${
+                            isBlocked ? 'bg-rose-100 text-rose-700 ring-rose-200' : 'bg-slate-100 text-slate-600 ring-slate-200'
+                          }`}
+                        >
+                          {isBlocked ? 'Blocked' : 'Not Blocked'}
+                        </span>
                       </td>
                     </tr>
                   )
