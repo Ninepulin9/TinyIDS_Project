@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt
 from sqlalchemy import func
 
 from extensions import db, socketio
-from models import Device, DeviceNetworkProfile, DeviceToken, Log, User
+from models import Blacklist, Device, DeviceNetworkProfile, DeviceToken, Log, User
 
 
 class MQTTService:
@@ -157,14 +157,18 @@ class MQTTService:
             enriched["description"] = enriched.get("alert_msg")
         severity = payload.get("severity") or payload.get("level") or payload.get("priority") or "high"
         event_time = self._parse_timestamp(payload)
+        source_ip = self._derive_ip(payload, "source")
         log = Log(
             user_id=device.user_id,
             device=device,
             payload=enriched,
             severity=severity,
-            source_ip=self._derive_ip(payload, "source"),
+            source_ip=source_ip,
             destination_ip=self._derive_ip(payload, "destination"),
         )
+        if source_ip:
+            self._auto_block_ip(device.user_id, source_ip, enriched)
+            self._sync_blocked_ip_to_device(device, source_ip)
         if event_time:
             log.created_at = event_time
         db.session.add(log)
@@ -526,6 +530,50 @@ class MQTTService:
             if value:
                 return value
         return None
+
+    def _auto_block_ip(self, user_id: int, ip_address: str, payload: dict) -> None:
+        ip_value = self._coerce_str(ip_address)
+        if not ip_value:
+            return
+        existing = (
+            Blacklist.query.filter(Blacklist.user_id == user_id, Blacklist.ip_address == ip_value)
+            .first()
+        )
+        if existing:
+            return
+        reason = payload.get("alert_msg") or payload.get("type") or "Auto-blocked from alert"
+        db.session.add(Blacklist(user_id=user_id, ip_address=ip_value, reason=str(reason)))
+
+    def _sync_blocked_ip_to_device(self, device: Device, ip_address: str) -> None:
+        if not self.client:
+            return
+        token_value = device.token.token if device.token else None
+        if not token_value:
+            return
+        ip_value = self._coerce_str(ip_address)
+        if not ip_value:
+            return
+        cached = self.latest_settings.get(token_value, {})
+        blocked = cached.get("blocked_ips") or cached.get("BLOCKED_IPS") or []
+        if isinstance(blocked, str):
+            blocked_list = [item.strip() for item in blocked.split(",") if item.strip()]
+        elif isinstance(blocked, list):
+            blocked_list = [str(item).strip() for item in blocked if str(item).strip()]
+        else:
+            blocked_list = []
+        if ip_value in blocked_list:
+            return
+        blocked_list.append(ip_value)
+        payload = dict(cached) if isinstance(cached, dict) else {}
+        payload["token"] = token_value
+        payload["blocked_ips"] = blocked_list
+        self.latest_settings[token_value] = dict(payload)
+        topic = f"esp/setting/Control-{token_value}"
+        try:
+            self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
+        except Exception as exc:  # noqa: BLE001
+            if self.app:
+                self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
 
 
 mqtt_service = MQTTService()
