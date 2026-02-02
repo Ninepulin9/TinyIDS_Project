@@ -72,6 +72,7 @@ const BlacklistPage = () => {
             baseEntries.map((entry) => String(entry.ip_address ?? '').trim().toLowerCase()).filter(Boolean),
           )
           const settingsEntries = []
+          const settingsByIp = new Map()
 
           settingsResults.forEach((result, idx) => {
             if (result.status !== 'fulfilled') return
@@ -83,6 +84,12 @@ const BlacklistPage = () => {
             const device = tokenDevices[idx]
             ips.forEach((ip) => {
               const key = ip.toLowerCase()
+              if (!settingsByIp.has(key)) {
+                settingsByIp.set(key, {
+                  device_id: device.id,
+                  device_name: device.device_name ?? device.name ?? 'ESP32',
+                })
+              }
               if (seenIps.has(key)) return
               seenIps.add(key)
               settingsEntries.push({
@@ -97,7 +104,20 @@ const BlacklistPage = () => {
             })
           })
 
-          mergedEntries = [...baseEntries, ...settingsEntries]
+          const mergedBaseEntries = baseEntries.map((entry) => {
+            const key = String(entry.ip_address ?? '').trim().toLowerCase()
+            const settingsMatch = settingsByIp.get(key)
+            if (!settingsMatch) return entry
+            return {
+              ...entry,
+              device_id: settingsMatch.device_id,
+              device_name: entry.device_name ?? settingsMatch.device_name,
+              reason: entry.reason ?? 'ESP settings',
+              readOnly: true,
+            }
+          })
+
+          mergedEntries = [...mergedBaseEntries, ...settingsEntries]
         }
       } catch {
         // ignore settings fetch errors and show stored blacklist
