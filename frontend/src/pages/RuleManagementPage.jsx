@@ -168,6 +168,22 @@ const RuleManagementPage = () => {
     loadDevices()
   }, [loadDevices])
 
+  useEffect(() => {
+    const socket = getSocket()
+    const handleLogNew = (payload) => {
+      const data = payload?.payload ?? payload
+      if (!data || typeof data !== 'object') return
+      const topic = String(data._mqtt_topic ?? '').toLowerCase()
+      if (topic === 'esp/alive' || data.ip || data.ip_address || data.device_ip) {
+        loadDevices()
+      }
+    }
+    socket.on('log:new', handleLogNew)
+    return () => {
+      socket.off('log:new', handleLogNew)
+    }
+  }, [loadDevices])
+
   const openDrawer = (device) => {
     setSelectedDevice(device)
     setRuleErrors({})

@@ -54,9 +54,19 @@ const ESPConfigPage = () => {
     const handleRegistered = () => {
       fetchDevices()
     }
+    const handleLogNew = (payload) => {
+      const data = payload?.payload ?? payload
+      if (!data || typeof data !== 'object') return
+      const topic = String(data._mqtt_topic ?? '').toLowerCase()
+      if (topic === 'esp/alive' || data.ip || data.ip_address || data.device_ip) {
+        fetchDevices()
+      }
+    }
     socket.on('device:registered', handleRegistered)
+    socket.on('log:new', handleLogNew)
     return () => {
       socket.off('device:registered', handleRegistered)
+      socket.off('log:new', handleLogNew)
     }
   }, [fetchDevices])
 
@@ -88,7 +98,7 @@ const ESPConfigPage = () => {
     pingIntervalRef.current = setInterval(() => {
       pingDevices()
       fetchDevices()
-    }, 30000)
+    }, 25000)
     return () => {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
