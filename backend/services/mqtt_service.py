@@ -543,6 +543,7 @@ class MQTTService:
             return
         reason = payload.get("alert_msg") or payload.get("type") or "Auto-blocked from alert"
         db.session.add(Blacklist(user_id=user_id, ip_address=ip_value, reason=str(reason)))
+        return
 
     def _sync_blocked_ip_to_device(self, device: Device, ip_address: str) -> None:
         if not self.client:
@@ -574,6 +575,7 @@ class MQTTService:
         except Exception as exc:  # noqa: BLE001
             if self.app:
                 self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
+
 
 
 mqtt_service = MQTTService()
