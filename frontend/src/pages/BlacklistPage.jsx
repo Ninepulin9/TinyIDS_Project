@@ -24,6 +24,8 @@ const BlacklistPage = () => {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [page, setPage] = useState(1)
+  const [devices, setDevices] = useState([])
+  const [unblockTarget, setUnblockTarget] = useState(null)
   const pageSize = 15
 
   const normalizeBlockedList = (value) => {
@@ -48,6 +50,7 @@ const BlacklistPage = () => {
         const devicesResponse = await api.get('/api/devices')
         const deviceList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
         const tokenDevices = deviceList.filter((device) => device?.token)
+        setDevices(deviceList)
 
         if (tokenDevices.length) {
           const settingsResults = await Promise.allSettled(
@@ -72,6 +75,7 @@ const BlacklistPage = () => {
               seenIps.add(key)
               settingsEntries.push({
                 id: `settings-${device.id}-${key}`,
+                device_id: device.id,
                 device_name: device.device_name ?? device.name ?? 'ESP32',
                 ip_address: ip,
                 reason: 'ESP settings',
@@ -146,6 +150,46 @@ const BlacklistPage = () => {
       await loadBlacklist()
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const handleUnblock = (entry) => {
+    if (!entry?.device_id || !entry?.ip_address) return
+    setUnblockTarget(entry)
+  }
+
+  const confirmUnblock = async () => {
+    const entry = unblockTarget
+    if (!entry?.device_id || !entry?.ip_address) return
+    if (!entry?.device_id || !entry?.ip_address) return
+    const device = devices.find((item) => item.id === entry.device_id)
+    if (!device?.token) {
+      toast.error('Device token not found. Unable to update ESP settings.')
+      return
+    }
+    try {
+      const { data } = await api.get(`/api/devices/${entry.device_id}/settings/latest`)
+      const payload = data && typeof data === 'object' ? { ...data } : {}
+      const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS ?? []
+      const blockedList = normalizeBlockedList(blocked)
+      const nextBlocked = blockedList.filter(
+        (ip) => String(ip).trim().toLowerCase() !== String(entry.ip_address).trim().toLowerCase(),
+      )
+      payload.blocked_ips = nextBlocked
+      payload.token = payload.token ?? device.token
+      await api.post(`/api/devices/${entry.device_id}/publish`, {
+        topic_base: 'esp/setting/Control',
+        payload,
+        append_token: false,
+      })
+      setEntries((prev) => prev.filter((item) => item.id !== entry.id))
+      toast.success('Unblocked IP and updated ESP settings')
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ?? err?.message ?? 'Unable to update ESP settings'
+      toast.error(message)
+    } finally {
+      setUnblockTarget(null)
     }
   }
 
@@ -226,9 +270,13 @@ const BlacklistPage = () => {
                       <td className="px-6 py-3 font-semibold text-slate-700">{entry.ip_address}</td>
                       <td className="px-6 py-3 text-right">
                         {entry.readOnly ? (
-                          <span className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500">
-                            From device
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUnblock(entry)}
+                            className="rounded-full border border-emerald-500 bg-white px-4 py-2 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700"
+                          >
+                            Unblock
+                          </button>
                         ) : (
                           <Button
                             type="button"
@@ -271,6 +319,34 @@ const BlacklistPage = () => {
               >
                 Next
               </button>
+            </div>
+          </div>
+        )}
+
+        {unblockTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+              <h3 className="text-lg font-semibold text-slate-900">Unblock IP?</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                This will remove{' '}
+                <span className="font-semibold">{unblockTarget.ip_address}</span> from ESP settings.
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setUnblockTarget(null)}
+                  className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmUnblock}
+                  className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600"
+                >
+                  Yes, unblock
+                </button>
+              </div>
             </div>
           </div>
         )}
