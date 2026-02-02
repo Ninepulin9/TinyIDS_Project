@@ -54,6 +54,17 @@ const BlacklistPage = () => {
         setDevices(deviceList)
 
         if (tokenDevices.length) {
+          await Promise.allSettled(
+            tokenDevices.map((device) =>
+              api.post(`/api/devices/${device.id}/publish`, {
+                topic_base: 'esp/setting/Control',
+                message: `showsetting-${device.token}`,
+                append_token: false,
+              }),
+            ),
+          )
+          await new Promise((resolve) => setTimeout(resolve, 600))
+
           const settingsResults = await Promise.allSettled(
             tokenDevices.map((device) => api.get(`/api/devices/${device.id}/settings/latest`)),
           )
