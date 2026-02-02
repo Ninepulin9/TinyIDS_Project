@@ -62,11 +62,16 @@ const ESPConfigPage = () => {
         fetchDevices()
       }
     }
+    const handleDeviceUpdated = () => {
+      fetchDevices()
+    }
     socket.on('device:registered', handleRegistered)
     socket.on('log:new', handleLogNew)
+    socket.on('device:updated', handleDeviceUpdated)
     return () => {
       socket.off('device:registered', handleRegistered)
       socket.off('log:new', handleLogNew)
+      socket.off('device:updated', handleDeviceUpdated)
     }
   }, [fetchDevices])
 

@@ -197,6 +197,7 @@ class MQTTService:
             device.is_active = True
         self._touch_device(device, payload, mark_active=None)
         db.session.commit()
+        socketio.emit("device:updated", {"device_id": device.id})
 
     def _handle_generic_log(self, payload: dict, topic: str) -> None:
         device = self._resolve_device(payload)

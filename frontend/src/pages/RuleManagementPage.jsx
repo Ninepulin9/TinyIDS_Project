@@ -178,9 +178,14 @@ const RuleManagementPage = () => {
         loadDevices()
       }
     }
+    const handleDeviceUpdated = () => {
+      loadDevices()
+    }
     socket.on('log:new', handleLogNew)
+    socket.on('device:updated', handleDeviceUpdated)
     return () => {
       socket.off('log:new', handleLogNew)
+      socket.off('device:updated', handleDeviceUpdated)
     }
   }, [loadDevices])
 
