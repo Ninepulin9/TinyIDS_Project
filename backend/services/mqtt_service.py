@@ -368,6 +368,8 @@ class MQTTService:
                                     qos=0,
                                     retain=False,
                                 )
+                                if self.app:
+                                    self.app.logger.info("Settings poll: requested settings for %s", token_value)
                                 # Merge DB blacklist into device settings if missing
                                 self._sync_blacklist_to_device(token_value, blocked_by_user[user_id])
                 except Exception as exc:  # noqa: BLE001
@@ -411,6 +413,10 @@ class MQTTService:
         topic = "esp/setting/Control"
         try:
             self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
+            if self.app:
+                self.app.logger.info(
+                    "Settings poll: synced %s blocked_ips to %s", len(merged), token_value
+                )
         except Exception as exc:  # noqa: BLE001
             if self.app:
                 self.app.logger.warning("Failed to sync blacklist to %s: %s", token_value, exc)
