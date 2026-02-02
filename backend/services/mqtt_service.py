@@ -1,4 +1,5 @@
 import json
+import re
 import secrets
 import string
 import threading
@@ -349,22 +350,66 @@ class MQTTService:
                 try:
                     if self.client and self.client.is_connected():
                         with self.app.app_context():
-                            tokens = (
-                                db.session.query(DeviceToken.token)
-                                .join(Device, Device.id == DeviceToken.device_id)
+                            devices = (
+                                db.session.query(Device.id, Device.user_id, DeviceToken.token)
+                                .join(DeviceToken, DeviceToken.device_id == Device.id)
                                 .all()
                             )
-                        for (token_value,) in tokens:
-                            if not token_value:
-                                continue
-                            topic = f"esp/setting/Control-{token_value}"
-                            self.client.publish(topic, f"showsetting-{token_value}", qos=0, retain=False)
+                            blocked_by_user = {}
+                            for device_id, user_id, token_value in devices:
+                                if not token_value:
+                                    continue
+                                if user_id not in blocked_by_user:
+                                    blocked_by_user[user_id] = self._get_blacklist_ips(user_id)
+                                # Request latest settings (same as Rule Management)
+                                topic = f"esp/setting/Control-{token_value}"
+                                self.client.publish(topic, f"showsetting-{token_value}", qos=0, retain=False)
+                                # Merge DB blacklist into device settings if missing
+                                self._sync_blacklist_to_device(token_value, blocked_by_user[user_id])
                 except Exception as exc:  # noqa: BLE001
                     if self.app:
                         self.app.logger.exception("Settings poll error: %s", exc)
                 time.sleep(self.settings_poll_interval)
 
         threading.Thread(target=_loop, daemon=True).start()
+
+    def _get_blacklist_ips(self, user_id: int) -> list[str]:
+        rows = Blacklist.query.filter(Blacklist.user_id == user_id).all()
+        ips = []
+        for row in rows:
+            value = self._coerce_str(row.ip_address)
+            if not value:
+                continue
+            # Keep only IPv4-like strings to avoid junk entries.
+            if not re.match(r"^(?:\\d{1,3}\\.){3}\\d{1,3}$", value):
+                continue
+            ips.append(value)
+        return ips
+
+    def _sync_blacklist_to_device(self, token_value: str, blacklist_ips: list[str]) -> None:
+        if not self.client or not token_value or not blacklist_ips:
+            return
+        cached = self.latest_settings.get(token_value, {})
+        blocked = cached.get("blocked_ips") or cached.get("BLOCKED_IPS") or []
+        if isinstance(blocked, str):
+            blocked_list = [item.strip() for item in blocked.split(",") if item.strip()]
+        elif isinstance(blocked, list):
+            blocked_list = [str(item).strip() for item in blocked if str(item).strip()]
+        else:
+            blocked_list = []
+        merged = list(dict.fromkeys(blocked_list + blacklist_ips))
+        if merged == blocked_list:
+            return
+        payload = dict(cached) if isinstance(cached, dict) else {}
+        payload["token"] = token_value
+        payload["blocked_ips"] = merged
+        self.latest_settings[token_value] = dict(payload)
+        topic = f"esp/setting/Control-{token_value}"
+        try:
+            self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
+        except Exception as exc:  # noqa: BLE001
+            if self.app:
+                self.app.logger.warning("Failed to sync blacklist to %s: %s", token_value, exc)
 
     def _emit_log(self, log: Log, device: Device) -> None:
         log_data = {
