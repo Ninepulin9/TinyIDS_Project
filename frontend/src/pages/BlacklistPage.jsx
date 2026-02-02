@@ -53,6 +53,14 @@ const BlacklistPage = () => {
     return null
   }
 
+  const isFreshSettings = (payload, maxAgeMs = 30000) => {
+    const raw = payload?.time ?? payload?.timestamp
+    if (!raw) return true
+    const parsed = new Date(raw)
+    if (Number.isNaN(parsed.getTime())) return true
+    return Date.now() - parsed.getTime() <= maxAgeMs
+  }
+
   const loadBlacklist = useCallback(async () => {
     setLoading(true)
     try {
@@ -111,6 +119,7 @@ const BlacklistPage = () => {
             if (result.status !== 'fulfilled') return
             const payload = result.value
             if (!payload || typeof payload !== 'object') return
+            if (!isFreshSettings(payload)) return
             const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
             const ips = normalizeBlockedList(blocked)
             if (!ips.length) return

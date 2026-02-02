@@ -362,8 +362,12 @@ class MQTTService:
                                 if user_id not in blocked_by_user:
                                     blocked_by_user[user_id] = self._get_blacklist_ips(user_id)
                                 # Request latest settings (same as Rule Management)
-                                topic = f"esp/setting/Control-{token_value}"
-                                self.client.publish(topic, f"showsetting-{token_value}", qos=0, retain=False)
+                                self.client.publish(
+                                    "esp/setting/Control",
+                                    f"showsetting-{token_value}",
+                                    qos=0,
+                                    retain=False,
+                                )
                                 # Merge DB blacklist into device settings if missing
                                 self._sync_blacklist_to_device(token_value, blocked_by_user[user_id])
                 except Exception as exc:  # noqa: BLE001
@@ -404,7 +408,7 @@ class MQTTService:
         payload["token"] = token_value
         payload["blocked_ips"] = merged
         self.latest_settings[token_value] = dict(payload)
-        topic = f"esp/setting/Control-{token_value}"
+        topic = "esp/setting/Control"
         try:
             self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
         except Exception as exc:  # noqa: BLE001
