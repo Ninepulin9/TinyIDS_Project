@@ -359,22 +359,13 @@ const BlacklistPage = () => {
                       <td className="px-6 py-3 font-medium text-slate-900">{entry.device_name ?? 'Unknown'}</td>
                       <td className="px-6 py-3 font-semibold text-slate-700">{entry.ip_address}</td>
                       <td className="px-6 py-3 text-right">
-                        {entry.readOnly ? (
+                        {entry.readOnly && (
                           <button
                             type="button"
                             onClick={() => handleUnblock(entry)}
                             className="rounded-full border border-emerald-500 bg-white px-4 py-2 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700"
                           >
                             Unblock
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="rounded-full border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60"
-                            disabled={deletingId === entry.id}
-                            onClick={() => handleDelete(entry.id)}
-                          >
-                            {deletingId === entry.id ? 'Deleting...' : 'Delete'}
                           </button>
                         )}
                       </td>
