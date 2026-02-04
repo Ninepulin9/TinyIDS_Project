@@ -32,6 +32,7 @@ class MQTTService:
         self.discovery_thread_started = False
         self.settings_poll_thread_started = False
         self.latest_settings: dict[str, dict] = {}
+        self.pending_blocks: dict[str, set[str]] = {}
 
     def init_app(self, app) -> None:
         self.app = app
@@ -169,7 +170,7 @@ class MQTTService:
         )
         if source_ip:
             self._auto_block_ip(device.user_id, source_ip, enriched)
-            self._sync_blocked_ip_to_device(device, source_ip)
+            self._queue_block_for_device(device, source_ip)
         if event_time:
             log.created_at = event_time
         db.session.add(log)
@@ -186,6 +187,11 @@ class MQTTService:
         token_value = self._coerce_str(enriched.get("token"))
         if token_value:
             self.latest_settings[token_value] = dict(enriched)
+            # Apply any pending block IPs once we have a fresh settings payload.
+            pending = self.pending_blocks.get(token_value)
+            if pending:
+                self._apply_blocklist_update(token_value, pending, enriched)
+                self.pending_blocks.pop(token_value, None)
         log = Log(
             user_id=device.user_id,
             device=device,
@@ -627,6 +633,48 @@ class MQTTService:
         topic = f"esp/setting/Control-{token_value}"
         try:
             self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
+        except Exception as exc:  # noqa: BLE001
+            if self.app:
+                self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
+
+    def _queue_block_for_device(self, device: Device, ip_address: str) -> None:
+        token_value = device.token.token if device.token else None
+        ip_value = self._coerce_str(ip_address)
+        if not token_value or not ip_value:
+            return
+        pending = self.pending_blocks.setdefault(token_value, set())
+        pending.add(ip_value)
+        cached = self.latest_settings.get(token_value)
+        if cached:
+            self._apply_blocklist_update(token_value, pending, cached)
+            self.pending_blocks.pop(token_value, None)
+        else:
+            # Request fresh settings so we can merge with full payload
+            if self.client:
+                self.client.publish(
+                    "esp/setting/Control",
+                    f"showsetting-{token_value}",
+                    qos=0,
+                    retain=False,
+                )
+
+    def _apply_blocklist_update(self, token_value: str, pending: set[str], cached: dict) -> None:
+        if not self.client:
+            return
+        blocked = cached.get("blocked_ips") or cached.get("BLOCKED_IPS") or []
+        if isinstance(blocked, str):
+            blocked_list = [item.strip() for item in blocked.split(",") if item.strip()]
+        elif isinstance(blocked, list):
+            blocked_list = [str(item).strip() for item in blocked if str(item).strip()]
+        else:
+            blocked_list = []
+        merged = list(dict.fromkeys(blocked_list + list(pending)))
+        payload = dict(cached) if isinstance(cached, dict) else {}
+        payload["token"] = token_value
+        payload["blocked_ips"] = merged
+        self.latest_settings[token_value] = dict(payload)
+        try:
+            self.client.publish("esp/setting/Control", json.dumps(payload), qos=0, retain=False)
         except Exception as exc:  # noqa: BLE001
             if self.app:
                 self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
