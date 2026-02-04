@@ -50,7 +50,7 @@ const Layout = ({ onLogout, user }) => {
 
   return (
   <div className="flex min-h-screen bg-slate-100 text-slate-900">
-    <aside className="hidden w-72 flex-shrink-0 flex-col bg-white shadow-xl lg:flex">
+    <aside className="hidden h-screen w-72 flex-shrink-0 flex-col overflow-y-auto bg-white shadow-xl lg:sticky lg:top-0 lg:flex">
       <div className="flex items-center justify-center bg-gradient-to-br from-sky-500 via-blue-500 to-blue-600 px-6 py-6">
         <Link to="/dashboard" className="text-2xl font-semibold tracking-wide text-white">
           TinyIDS
