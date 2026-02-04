@@ -4,7 +4,6 @@ import toast from 'react-hot-toast'
 
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
-import Button from '../components/ui/Button.jsx'
 
 const formatTimestamp = (value) => {
   if (!value) return '--'
@@ -21,7 +20,6 @@ const BlacklistPage = () => {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
-  const [deletingId, setDeletingId] = useState(null)
   const [lastUpdated, setLastUpdated] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [page, setPage] = useState(1)
@@ -64,112 +62,64 @@ const BlacklistPage = () => {
   const loadBlacklist = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await api.get('/api/blacklist')
-      let baseEntries = Array.isArray(data) ? data : []
-      let mergedEntries = [...baseEntries]
+      const devicesResponse = await api.get('/api/devices')
+      const deviceList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
+      const tokenDevices = deviceList.filter((device) => device?.token)
+      setDevices(deviceList)
 
-      try {
-        const logsResponse = await api.get('/api/logs')
-        const logs = Array.isArray(logsResponse.data) ? logsResponse.data : []
-        const ipToDevice = new Map()
-        logs.forEach((log) => {
-          const ip = String(log.source_ip ?? '').trim()
-          const name = log.device_name
-          if (ip && name && !ipToDevice.has(ip)) {
-            ipToDevice.set(ip, name)
-          }
-        })
-        baseEntries = baseEntries.map((entry) => {
-          const ip = String(entry.ip_address ?? '').trim()
-          if (!ip) return entry
-          const name = ipToDevice.get(ip)
-          if (!name) return entry
-          if (!entry.device_name || entry.device_name === 'Unknown') {
-            return { ...entry, device_name: name }
-          }
-          return entry
-        })
+      let mergedEntries = []
+      if (tokenDevices.length) {
+        await Promise.allSettled(
+          tokenDevices.map((device) =>
+            api.post(`/api/devices/${device.id}/publish`, {
+              topic_base: 'esp/setting/Control',
+              message: `showsetting-${device.token}`,
+              append_token: false,
+            }),
+          ),
+        )
 
-        const devicesResponse = await api.get('/api/devices')
-        const deviceList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
-        const tokenDevices = deviceList.filter((device) => device?.token)
-        setDevices(deviceList)
+        const settingsResults = await Promise.allSettled(
+          tokenDevices.map((device) => fetchSettingsWithRetry(device.id)),
+        )
+        const seenIps = new Set()
+        const settingsEntries = []
 
-        if (tokenDevices.length) {
-          await Promise.allSettled(
-            tokenDevices.map((device) =>
-              api.post(`/api/devices/${device.id}/publish`, {
-                topic_base: 'esp/setting/Control',
-                message: `showsetting-${device.token}`,
-                append_token: false,
-              }),
-            ),
-          )
-
-          const settingsResults = await Promise.allSettled(
-            tokenDevices.map((device) => fetchSettingsWithRetry(device.id)),
-          )
-          const seenIps = new Set(
-            baseEntries.map((entry) => String(entry.ip_address ?? '').trim().toLowerCase()).filter(Boolean),
-          )
-          const settingsEntries = []
-          const settingsByIp = new Map()
-
-          settingsResults.forEach((result, idx) => {
-            if (result.status !== 'fulfilled') return
-            const payload = result.value
-            if (!payload || typeof payload !== 'object') return
-            if (!isFreshSettings(payload)) return
-            const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
-            const ips = normalizeBlockedList(blocked)
-            if (!ips.length) return
-            const device = tokenDevices[idx]
-            ips.forEach((ip) => {
-              const key = ip.toLowerCase()
-              if (!settingsByIp.has(key)) {
-                settingsByIp.set(key, {
-                  device_id: device.id,
-                  device_name: device.device_name ?? device.name ?? 'ESP32',
-                })
-              }
-              if (seenIps.has(key)) return
-              seenIps.add(key)
-              settingsEntries.push({
-                id: `settings-${device.id}-${key}`,
-                device_id: device.id,
-                device_name: device.device_name ?? device.name ?? 'ESP32',
-                ip_address: ip,
-                reason: 'ESP settings',
-                created_at: payload.time ?? payload.timestamp ?? new Date().toISOString(),
-                readOnly: true,
-              })
+        settingsResults.forEach((result, idx) => {
+          if (result.status !== 'fulfilled') return
+          const payload = result.value
+          if (!payload || typeof payload !== 'object') return
+          if (!isFreshSettings(payload)) return
+          const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
+          const ips = normalizeBlockedList(blocked)
+          if (!ips.length) return
+          const device = tokenDevices[idx]
+          ips.forEach((ip) => {
+            const key = ip.toLowerCase()
+            if (seenIps.has(key)) return
+            seenIps.add(key)
+            settingsEntries.push({
+              id: `settings-${device.id}-${key}`,
+              device_id: device.id,
+              device_name: device.device_name ?? device.name ?? 'ESP32',
+              ip_address: ip,
+              reason: 'ESP settings',
+              created_at: payload.time ?? payload.timestamp ?? new Date().toISOString(),
+              readOnly: true,
             })
           })
+        })
 
-          const mergedBaseEntries = baseEntries.map((entry) => {
-            const key = String(entry.ip_address ?? '').trim().toLowerCase()
-            const settingsMatch = settingsByIp.get(key)
-            if (!settingsMatch) return entry
-            return {
-              ...entry,
-              device_id: settingsMatch.device_id,
-              device_name: entry.device_name ?? settingsMatch.device_name,
-              reason: entry.reason ?? 'ESP settings',
-              readOnly: true,
-            }
-          })
-
-          mergedEntries = [...mergedBaseEntries, ...settingsEntries]
-        }
-      } catch {
-        // ignore settings fetch errors and show stored blacklist
+        mergedEntries = settingsEntries
       }
 
       setEntries(mergedEntries)
       setLastUpdated(new Date().toISOString())
     } catch (err) {
       const message =
-        err?.response?.data?.message ?? err?.message ?? 'ไม่สามารถโหลดข้อมูล Blacklist ได้ ใช้ข้อมูลตัวอย่างแทน'
+        err?.response?.data?.message ??
+        err?.message ??
+        'Unable to load ESP settings for blacklist.'
       toast.error(message)
       setEntries([])
     } finally {
@@ -179,6 +129,20 @@ const BlacklistPage = () => {
 
   useEffect(() => {
     loadBlacklist()
+  }, [loadBlacklist])
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadBlacklist()
+      }
+    }
+    window.addEventListener('focus', handleVisibility)
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      window.removeEventListener('focus', handleVisibility)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [loadBlacklist])
 
   useEffect(() => {
@@ -216,23 +180,6 @@ const BlacklistPage = () => {
     const start = (pageSafe - 1) * pageSize
     return filteredEntries.slice(start, start + pageSize)
   }, [filteredEntries, pageSafe])
-
-  const handleDelete = async (id) => {
-    if (!id) return
-    setDeletingId(id)
-    try {
-      await api.delete(`/api/blacklist/${id}`)
-      setEntries((prev) => prev.filter((entry) => entry.id !== id))
-      toast.success('ลบรายการสำเร็จ')
-    } catch (err) {
-      const message =
-        err?.response?.data?.message ?? err?.message ?? 'ลบรายการไม่สำเร็จ จะซ่อนรายการจากมุมมองชั่วคราว'
-      setEntries((prev) => prev.filter((entry) => entry.id !== id))
-      toast.error(message)
-    } finally {
-      setDeletingId(null)
-    }
-  }
 
   const handleRefresh = async () => {
     setRefreshing(true)
