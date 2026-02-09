@@ -275,6 +275,12 @@ const RuleManagementPage = () => {
     try {
       const { data } = await api.get(`/api/devices/${deviceId}/settings/latest`)
       if (!data) return false
+      const hasSettings =
+        data.CFG_RATE_LIMIT_COUNT != null ||
+        data.CFG_RATE_LIMIT_SECONDS != null ||
+        data.cfg_rate_limit_count != null ||
+        data.cfg_rate_limit_seconds != null
+      if (!hasSettings) return false
       setRuleValues(mapPayloadToRules(data, deviceToken))
       setAwaitingToken('')
       toast.success('Loaded settings from device')
@@ -402,14 +408,21 @@ const RuleManagementPage = () => {
       const topic = String(data._mqtt_topic ?? '').toLowerCase()
       if (token !== awaitingToken) return
       if (topic !== 'esp/setting/now') return
-      setRuleValues(mapPayloadToRules(data, awaitingToken))
-      setAwaitingToken('')
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current)
-        loadTimeoutRef.current = null
+      const hasSettings =
+        data.CFG_RATE_LIMIT_COUNT != null ||
+        data.CFG_RATE_LIMIT_SECONDS != null ||
+        data.cfg_rate_limit_count != null ||
+        data.cfg_rate_limit_seconds != null
+      if (hasSettings) {
+        setRuleValues(mapPayloadToRules(data, awaitingToken))
+        setAwaitingToken('')
+        if (loadTimeoutRef.current) {
+          clearTimeout(loadTimeoutRef.current)
+          loadTimeoutRef.current = null
+        }
+        stopPolling()
+        toast.success('Loaded settings from device')
       }
-      stopPolling()
-      toast.success('Loaded settings from device')
     }
     socket.on('log:new', handleLogNew)
     return () => {
@@ -424,20 +437,27 @@ const RuleManagementPage = () => {
       toast.error('No token found for this device.')
       return
     }
+    setLoadingRules(true)
     try {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
         message: `showsetting-default-${deviceToken}`,
         append_token: false,
       })
-      toast.success('Requested default settings')
+      // Ask for the full settings payload after default reset
+      await api.post(`/api/devices/${selectedDevice.id}/publish`, {
+        topic_base: 'esp/setting/Control',
+        message: `showsetting-${deviceToken}`,
+        append_token: false,
+      })
       setAwaitingToken(deviceToken)
       stopPolling()
       pollRef.current.timer = setInterval(async () => {
         pollRef.current.attempts += 1
         const done = await pollSettingsOnce(deviceToken, selectedDevice.id)
-        if (done || pollRef.current.attempts >= 10) {
+        if (done || pollRef.current.attempts >= 20) {
           stopPolling()
+          setLoadingRules(false)
           if (!done) {
             toast.error('No settings payload found yet. Try again.')
           }
@@ -446,6 +466,7 @@ const RuleManagementPage = () => {
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request defaults'
       toast.error(message)
+      setLoadingRules(false)
     }
   }
 

@@ -8,6 +8,24 @@ import Switch from '../components/ui/Switch.jsx'
 const getErrorMessage = (error, fallbackMessage) =>
   error?.response?.data?.message ?? error?.message ?? fallbackMessage
 
+const timeframeToMinutes = {
+  seconds: 0,
+  minutes: 1,
+  hours: 60,
+  days: 1440,
+  months: 43200,
+}
+
+const minutesToTimeframe = (value) => {
+  const minutes = Number(value)
+  if (Number.isNaN(minutes)) return 'days'
+  if (minutes >= 43200) return 'months'
+  if (minutes >= 1440) return 'days'
+  if (minutes >= 60) return 'hours'
+  if (minutes >= 1) return 'minutes'
+  return 'seconds'
+}
+
 const Settings = () => {
   const [systemSettings, setSystemSettings] = useState({
     log_retention_days: 30,
@@ -37,7 +55,7 @@ const Settings = () => {
         const widgets = dashboardData.widgets ?? dashboardData.widgets_visible ?? {}
         const timeframe =
           dashboardData.timeframe_minutes ??
-          dashboardData.graph_timeframe ??
+          timeframeToMinutes[dashboardData.graph_timeframe] ??
           prev.timeframe_minutes
         setDashboardSettings((prev) => ({
           ...prev,
@@ -75,7 +93,7 @@ const Settings = () => {
     setDashboardSaving(true)
     try {
       const payload = {
-        graph_timeframe: dashboardSettings.timeframe_minutes,
+        graph_timeframe: minutesToTimeframe(dashboardSettings.timeframe_minutes),
         widgets: dashboardSettings.widgets_visible,
       }
       await api.put('/api/dashboard-settings/me', payload)

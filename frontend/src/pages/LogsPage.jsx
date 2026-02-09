@@ -95,6 +95,7 @@ const LogsPage = () => {
   const [timeframeDays, setTimeframeDays] = useState(30)
   const [blacklistSet, setBlacklistSet] = useState(new Set())
   const [page, setPage] = useState(1)
+  const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
   const isMountedRef = useRef(false)
   const pollIntervalRef = useRef(null)
@@ -237,9 +238,14 @@ const LogsPage = () => {
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize))
   const pageSafe = Math.min(page, totalPages)
   const pagedLogs = useMemo(() => {
+    const ordered = [...filteredLogs].sort((left, right) => {
+      const leftTime = dayjs(left.timestamp).valueOf()
+      const rightTime = dayjs(right.timestamp).valueOf()
+      return sortDesc ? rightTime - leftTime : leftTime - rightTime
+    })
     const start = (pageSafe - 1) * pageSize
-    return filteredLogs.slice(start, start + pageSize)
-  }, [filteredLogs, pageSafe])
+    return ordered.slice(start, start + pageSize)
+  }, [filteredLogs, pageSafe, sortDesc])
 
   const chartData = useMemo(() => {
     const daysWindow = Number(timeframeDays) === 7 ? 7 : 30
@@ -380,6 +386,7 @@ const LogsPage = () => {
             </div>
             <button
               type="button"
+              onClick={() => setSortDesc((prev) => !prev)}
               className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-300 hover:text-sky-500"
               aria-label="Filter logs"
             >
