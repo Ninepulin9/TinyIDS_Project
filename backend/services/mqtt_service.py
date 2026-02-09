@@ -183,6 +183,9 @@ class MQTTService:
             return
         self._touch_device(device, payload, mark_active=True)
         enriched = self._enrich_payload(payload, topic, default_type="ESP Settings")
+        received_at = datetime.utcnow().isoformat() + "Z"
+        enriched.setdefault("_received_at", received_at)
+        enriched.setdefault("received_at", received_at)
         enriched.setdefault("description", "Current configuration snapshot reported by ESP.")
         token_value = self._coerce_str(enriched.get("token"))
         if token_value:

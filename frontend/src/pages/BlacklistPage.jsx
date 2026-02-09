@@ -38,6 +38,8 @@ const BlacklistPage = () => {
       .filter(Boolean)
   }
 
+  const isValidIp = (value) => /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(value).trim())
+
   const fetchSettingsWithRetry = async (deviceId, attempts = 5, delayMs = 500) => {
     for (let i = 0; i < attempts; i += 1) {
       try {
@@ -52,7 +54,7 @@ const BlacklistPage = () => {
   }
 
   const isFreshSettings = (payload, maxAgeMs = 30000) => {
-    const raw = payload?.time ?? payload?.timestamp
+    const raw = payload?._received_at ?? payload?.received_at ?? payload?.time ?? payload?.timestamp
     if (!raw) return true
     const parsed = new Date(raw)
     if (Number.isNaN(parsed.getTime())) return true
@@ -95,6 +97,7 @@ const BlacklistPage = () => {
           if (!ips.length) return
           const device = tokenDevices[idx]
           ips.forEach((ip) => {
+            if (!isValidIp(ip)) return
             const key = ip.toLowerCase()
             if (seenIps.has(key)) return
             seenIps.add(key)

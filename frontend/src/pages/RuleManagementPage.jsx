@@ -158,8 +158,8 @@ const RuleManagementPage = () => {
   const [saving, setSaving] = useState(false)
   const [loadingRules, setLoadingRules] = useState(false)
   const [awaitingToken, setAwaitingToken] = useState('')
-  const loadTimeoutRef = useRef(null)
   const pollRef = useRef({ timer: null, attempts: 0 })
+  const requestMetaRef = useRef({ token: '', requestedAt: 0 })
   const [expanded, setExpanded] = useState(() =>
     ruleSections.reduce((acc, section, idx) => ({ ...acc, [section.id]: idx === 0 }), {})
   )
@@ -275,6 +275,7 @@ const RuleManagementPage = () => {
     try {
       const { data } = await api.get(`/api/devices/${deviceId}/settings/latest`)
       if (!data) return false
+      if (!isFreshSettingsPayload(data, deviceToken)) return false
       const hasSettings =
         data.CFG_RATE_LIMIT_COUNT != null ||
         data.CFG_RATE_LIMIT_SECONDS != null ||
@@ -367,6 +368,7 @@ const RuleManagementPage = () => {
       toast.error('No token found for this device.')
       return
     }
+    requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
     setLoadingRules(true)
     setAwaitingToken(deviceToken)
     try {
@@ -405,6 +407,7 @@ const RuleManagementPage = () => {
       const topic = String(data._mqtt_topic ?? '').toLowerCase()
       if (token !== awaitingToken) return
       if (topic !== 'esp/setting/now') return
+      if (!isFreshSettingsPayload(data, awaitingToken)) return
       const hasSettings =
         data.CFG_RATE_LIMIT_COUNT != null ||
         data.CFG_RATE_LIMIT_SECONDS != null ||
@@ -414,10 +417,6 @@ const RuleManagementPage = () => {
         setRuleValues(mapPayloadToRules(data, awaitingToken))
         setAwaitingToken('')
         setLoadingRules(false)
-        if (loadTimeoutRef.current) {
-          clearTimeout(loadTimeoutRef.current)
-          loadTimeoutRef.current = null
-        }
         stopPolling()
         toast.success('Loaded settings from device')
       }
@@ -435,6 +434,7 @@ const RuleManagementPage = () => {
       toast.error('No token found for this device.')
       return
     }
+    requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
     setLoadingRules(true)
     setRuleValues({ ...defaultRuleState, token: deviceToken })
     try {
@@ -449,20 +449,42 @@ const RuleManagementPage = () => {
         message: `showsetting-${deviceToken}`,
         append_token: false,
       })
+      setTimeout(() => {
+        api.post(`/api/devices/${selectedDevice.id}/publish`, {
+          topic_base: 'esp/setting/Control',
+          message: `showsetting-${deviceToken}`,
+          append_token: false,
+        })
+      }, 700)
       setAwaitingToken(deviceToken)
       stopPolling()
-      pollRef.current.timer = setInterval(async () => {
-        pollRef.current.attempts += 1
-        const done = await pollSettingsOnce(deviceToken, selectedDevice.id)
-        if (done) {
-          stopPolling()
-        }
-      }, 1000)
+      setTimeout(() => {
+        pollRef.current.timer = setInterval(async () => {
+          pollRef.current.attempts += 1
+          const done = await pollSettingsOnce(deviceToken, selectedDevice.id)
+          if (done) {
+            stopPolling()
+          }
+        }, 1000)
+      }, 5000)
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request defaults'
       toast.error(message)
       setLoadingRules(false)
     }
+  }
+
+  const isFreshSettingsPayload = (payload, token) => {
+    if (!payload || typeof payload !== 'object') return false
+    const payloadToken = String(payload.token ?? '').trim()
+    if (token && payloadToken && payloadToken !== token) return false
+    const receivedAtRaw = payload._received_at || payload.received_at || payload.time || payload.timestamp
+    if (!receivedAtRaw) return true
+    const parsed = new Date(receivedAtRaw)
+    if (Number.isNaN(parsed.getTime())) return true
+    const requestedAt = requestMetaRef.current.requestedAt || 0
+    if (!requestedAt) return true
+    return parsed.getTime() >= requestedAt - 1000
   }
 
   const renderStatus = (device) => {
