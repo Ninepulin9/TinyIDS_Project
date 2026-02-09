@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Filter, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -26,6 +26,9 @@ const BlacklistPage = () => {
   const [devices, setDevices] = useState([])
   const [unblockTarget, setUnblockTarget] = useState(null)
   const pageSize = 15
+  const retryRef = useRef({ timer: null, attempts: 0 })
+  const maxRetries = 5
+  const retryDelayMs = 2000
 
   const normalizeBlockedList = (value) => {
     if (Array.isArray(value)) {
@@ -64,6 +67,11 @@ const BlacklistPage = () => {
   const loadBlacklist = useCallback(async () => {
     setLoading(true)
     try {
+      if (retryRef.current.timer) {
+        clearTimeout(retryRef.current.timer)
+        retryRef.current.timer = null
+      }
+      let keepLoading = false
       const devicesResponse = await api.get('/api/devices')
       const deviceList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
       const tokenDevices = deviceList.filter((device) => device?.token)
@@ -116,8 +124,20 @@ const BlacklistPage = () => {
         mergedEntries = settingsEntries
       }
 
+      if (tokenDevices.length && mergedEntries.length === 0 && retryRef.current.attempts < maxRetries) {
+        retryRef.current.attempts += 1
+        keepLoading = true
+        retryRef.current.timer = setTimeout(() => {
+          loadBlacklist()
+        }, retryDelayMs)
+        return
+      }
+      retryRef.current.attempts = 0
       setEntries(mergedEntries)
       setLastUpdated(new Date().toISOString())
+      if (!keepLoading) {
+        setLoading(false)
+      }
     } catch (err) {
       const message =
         err?.response?.data?.message ??
@@ -125,13 +145,19 @@ const BlacklistPage = () => {
         'Unable to load ESP settings for blacklist.'
       toast.error(message)
       setEntries([])
-    } finally {
+      retryRef.current.attempts = 0
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     loadBlacklist()
+    return () => {
+      if (retryRef.current.timer) {
+        clearTimeout(retryRef.current.timer)
+        retryRef.current.timer = null
+      }
+    }
   }, [loadBlacklist])
 
   useEffect(() => {
