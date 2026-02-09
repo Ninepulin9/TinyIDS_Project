@@ -368,7 +368,6 @@ const RuleManagementPage = () => {
         message: `showsetting-${deviceToken}`,
         append_token: false,
       })
-      toast.success('Requested settings (showsetting)')
       if (loadTimeoutRef.current) {
         clearTimeout(loadTimeoutRef.current)
       }
@@ -432,6 +431,18 @@ const RuleManagementPage = () => {
         append_token: false,
       })
       toast.success('Requested default settings')
+      setAwaitingToken(deviceToken)
+      stopPolling()
+      pollRef.current.timer = setInterval(async () => {
+        pollRef.current.attempts += 1
+        const done = await pollSettingsOnce(deviceToken, selectedDevice.id)
+        if (done || pollRef.current.attempts >= 10) {
+          stopPolling()
+          if (!done) {
+            toast.error('No settings payload found yet. Try again.')
+          }
+        }
+      }, 1000)
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request defaults'
       toast.error(message)
@@ -575,7 +586,7 @@ const RuleManagementPage = () => {
                 <div className="space-y-5">
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="text-sm font-semibold text-slate-700">Token (auto from registration)</label>
+                      <label className="text-sm font-semibold text-slate-700">Token</label>
                       <input
                         type="text"
                         value={ruleValues.token}

@@ -26,19 +26,25 @@ const Settings = () => {
       try {
         const [system, dashboard] = await Promise.all([
           api.get('/api/settings/system'),
-          api.get('/api/settings/dashboard'),
+          api.get('/api/dashboard-settings/me'),
         ])
         const { cooldown_seconds: _cooldown, ...systemData } = system?.data ?? {}
         setSystemSettings((prev) => ({
           ...prev,
           ...systemData,
         }))
+        const dashboardData = dashboard?.data ?? {}
+        const widgets = dashboardData.widgets ?? dashboardData.widgets_visible ?? {}
+        const timeframe =
+          dashboardData.timeframe_minutes ??
+          dashboardData.graph_timeframe ??
+          prev.timeframe_minutes
         setDashboardSettings((prev) => ({
           ...prev,
-          ...(dashboard?.data ?? {}),
+          timeframe_minutes: timeframe,
           widgets_visible: {
             ...prev.widgets_visible,
-            ...(dashboard?.data?.widgets_visible ?? {}),
+            ...widgets,
           },
         }))
       } catch (error) {
@@ -68,7 +74,11 @@ const Settings = () => {
     if (dashboardSaving) return
     setDashboardSaving(true)
     try {
-      await api.put('/api/settings/dashboard', dashboardSettings)
+      const payload = {
+        graph_timeframe: dashboardSettings.timeframe_minutes,
+        widgets: dashboardSettings.widgets_visible,
+      }
+      await api.put('/api/dashboard-settings/me', payload)
       toast.success('Dashboard settings saved')
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to save dashboard settings. Please try again.'))
