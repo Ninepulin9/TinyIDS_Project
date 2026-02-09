@@ -50,7 +50,9 @@ def _ensure_dashboard_settings(user_id: int) -> DashboardSettings:
 def _serialize_dashboard_settings(settings: DashboardSettings) -> dict:
     return {
         "graph_timeframe": MINUTES_TO_TIMEFRAME.get(settings.timeframe_minutes, DEFAULT_GRAPH_TIMEFRAME),
+        "timeframe_minutes": settings.timeframe_minutes,
         "widgets": settings.to_widget_config(),
+        "widgets_visible": settings.to_widget_config(),
         "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
     }
 
@@ -71,6 +73,13 @@ def dashboard_settings_modern():
 
     payload = request.get_json(silent=True) or {}
 
+    timeframe_minutes = payload.get("timeframe_minutes")
+    if timeframe_minutes is not None:
+        try:
+            settings.timeframe_minutes = int(timeframe_minutes)
+        except (TypeError, ValueError):
+            return jsonify({"message": "timeframe_minutes must be an integer"}), HTTPStatus.BAD_REQUEST
+
     timeframe = payload.get("graph_timeframe")
     if timeframe is not None:
         if timeframe not in ALLOWED_TIMEFRAMES:
@@ -81,6 +90,8 @@ def dashboard_settings_modern():
         settings.set_graph_timeframe(timeframe)
 
     widgets = payload.get("widgets")
+    if widgets is None:
+        widgets = payload.get("widgets_visible")
     if widgets is not None:
         if not isinstance(widgets, dict):
             return jsonify({"message": "widgets must be an object of boolean flags"}), HTTPStatus.BAD_REQUEST

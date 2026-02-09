@@ -283,6 +283,7 @@ const RuleManagementPage = () => {
       if (!hasSettings) return false
       setRuleValues(mapPayloadToRules(data, deviceToken))
       setAwaitingToken('')
+      setLoadingRules(false)
       toast.success('Loaded settings from device')
       return true
     } catch {
@@ -374,18 +375,12 @@ const RuleManagementPage = () => {
         message: `showsetting-${deviceToken}`,
         append_token: false,
       })
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current)
-      }
       stopPolling()
       pollRef.current.timer = setInterval(async () => {
         pollRef.current.attempts += 1
         const done = await pollSettingsOnce(deviceToken, targetDevice.id)
-        if (done || pollRef.current.attempts >= 10) {
+        if (done) {
           stopPolling()
-          if (!done) {
-            toast.error('No settings payload found yet. Try again.')
-          }
         }
       }, 1000)
     } catch (err) {
@@ -393,8 +388,9 @@ const RuleManagementPage = () => {
       toast.error(message)
       setAwaitingToken('')
       stopPolling()
-    } finally {
       setLoadingRules(false)
+    } finally {
+      // keep loading until settings arrive
     }
   }
 
@@ -416,6 +412,7 @@ const RuleManagementPage = () => {
       if (hasSettings) {
         setRuleValues(mapPayloadToRules(data, awaitingToken))
         setAwaitingToken('')
+        setLoadingRules(false)
         if (loadTimeoutRef.current) {
           clearTimeout(loadTimeoutRef.current)
           loadTimeoutRef.current = null
@@ -438,6 +435,7 @@ const RuleManagementPage = () => {
       return
     }
     setLoadingRules(true)
+    setRuleValues((prev) => ({ ...prev, token: deviceToken }))
     try {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
@@ -455,12 +453,8 @@ const RuleManagementPage = () => {
       pollRef.current.timer = setInterval(async () => {
         pollRef.current.attempts += 1
         const done = await pollSettingsOnce(deviceToken, selectedDevice.id)
-        if (done || pollRef.current.attempts >= 20) {
+        if (done) {
           stopPolling()
-          setLoadingRules(false)
-          if (!done) {
-            toast.error('No settings payload found yet. Try again.')
-          }
         }
       }, 1000)
     } catch (err) {

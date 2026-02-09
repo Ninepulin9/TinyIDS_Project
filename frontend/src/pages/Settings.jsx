@@ -61,8 +61,8 @@ const Settings = () => {
           ...prev,
           timeframe_minutes: timeframe,
           widgets_visible: {
-            ...prev.widgets_visible,
-            ...widgets,
+            traffic: widgets.data_pipeline_card ?? prev.widgets_visible.traffic,
+            alerts: widgets.alerts_triggered ?? prev.widgets_visible.alerts,
           },
         }))
       } catch (error) {
@@ -93,8 +93,12 @@ const Settings = () => {
     setDashboardSaving(true)
     try {
       const payload = {
+        timeframe_minutes: Number(dashboardSettings.timeframe_minutes),
         graph_timeframe: minutesToTimeframe(dashboardSettings.timeframe_minutes),
-        widgets: dashboardSettings.widgets_visible,
+        widgets: {
+          data_pipeline_card: Boolean(dashboardSettings.widgets_visible?.traffic),
+          alerts_triggered: Boolean(dashboardSettings.widgets_visible?.alerts),
+        },
       }
       await api.put('/api/dashboard-settings/me', payload)
       toast.success('Dashboard settings saved')
