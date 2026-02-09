@@ -202,6 +202,7 @@ const BlacklistPage = () => {
     const entry = unblockTarget
     if (!entry?.device_id || !entry?.ip_address) return
     if (!entry?.device_id || !entry?.ip_address) return
+    const ipLabel = entry?.ip_address ?? 'Unknown IP'
     const device = devices.find((item) => item.id === entry.device_id)
     if (!device?.token) {
       toast.error('Device token not found. Unable to update ESP settings.')
@@ -223,11 +224,12 @@ const BlacklistPage = () => {
         append_token: false,
       })
       setEntries((prev) => prev.filter((item) => item.id !== entry.id))
-      toast.success('Unblocked IP and updated ESP settings')
+      toast.success(`Successfully unblocked ${ipLabel}`)
     } catch (err) {
       const message =
         err?.response?.data?.message ?? err?.message ?? 'Unable to update ESP settings'
-      toast.error(message)
+      console.warn(message)
+      toast.error(`Unsuccessfully unblocked ${ipLabel}`)
     } finally {
       setUnblockTarget(null)
     }
