@@ -23,6 +23,7 @@ const defaultRuleState = {
   g_target_trusted_mac: '',
   g_mqtt_whitelist: '',
   blocked_ips: '',
+  xss_patterns: '',
 }
 
 const ruleSections = [
@@ -117,6 +118,22 @@ const ruleSections = [
         helper: 'blocked_ips (comma-separated)',
         placeholder: '192.168.1.10, 192.168.1.11',
         type: 'text',
+      },
+    ],
+  },
+  {
+    id: 'xss',
+    title: 'XSS Patterns',
+    subtitle: 'xss_patterns',
+    description: 'Comma separated list of XSS patterns to detect/block.',
+    fields: [
+      {
+        key: 'xss_patterns',
+        label: 'XSS Patterns',
+        helper: 'xss_patterns (comma-separated)',
+        placeholder: '<script>, javascript:, onerror=',
+        type: 'text',
+        fullWidth: true,
       },
     ],
   },
@@ -243,6 +260,7 @@ const RuleManagementPage = () => {
     g_target_trusted_mac: coerceList(payload?.g_target_trusted_mac ?? payload?.G_TARGET_TRUSTED_MAC),
     g_mqtt_whitelist: coerceList(payload?.g_mqtt_whitelist ?? payload?.G_MQTT_WHITELIST),
     blocked_ips: coerceList(payload?.blocked_ips ?? payload?.BLOCKED_IPS),
+    xss_patterns: coerceList(payload?.xss_patterns ?? payload?.XSS_PATTERNS),
   })
 
   const stopPolling = () => {
@@ -315,6 +333,7 @@ const RuleManagementPage = () => {
       g_target_trusted_mac: toArray(ruleValues.g_target_trusted_mac),
       g_mqtt_whitelist: toArray(ruleValues.g_mqtt_whitelist),
       blocked_ips: toArray(ruleValues.blocked_ips),
+      xss_patterns: toArray(ruleValues.xss_patterns),
     }
 
     setSaving(true)
@@ -398,6 +417,26 @@ const RuleManagementPage = () => {
       socket.off('log:new', handleLogNew)
     }
   }, [awaitingToken])
+
+  const handleSetDefault = async () => {
+    if (!selectedDevice) return
+    const deviceToken = (selectedDevice?.token ?? ruleValues.token)?.trim()
+    if (!deviceToken) {
+      toast.error('No token found for this device.')
+      return
+    }
+    try {
+      await api.post(`/api/devices/${selectedDevice.id}/publish`, {
+        topic_base: 'esp/setting/Control',
+        message: `showsetting-default-${deviceToken}`,
+        append_token: false,
+      })
+      toast.success('Requested default settings')
+    } catch (err) {
+      const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request defaults'
+      toast.error(message)
+    }
+  }
 
   const renderStatus = (device) => {
     const online = device?.active === true || (device.status ?? '').toLowerCase() === 'online'
@@ -556,15 +595,15 @@ const RuleManagementPage = () => {
                         aria-label="Send settings to device"
                       >
                         {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                        Send to Device
+                        Save
                       </button>
                       <button
                         type="button"
-                        onClick={handleLoadFromDevice}
+                        onClick={handleSetDefault}
                         className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-                        aria-label="Load settings from device"
+                        aria-label="Reset settings to default"
                       >
-                        Load from Device
+                        Set to Default
                       </button>
                     </div>
                   </div>
