@@ -396,6 +396,7 @@ const RuleManagementPage = () => {
 
   useEffect(() => {
     if (!awaitingToken) return
+    setLoadingRules(true)
     const socket = getSocket()
     const handleLogNew = (payload) => {
       const data = payload?.payload ?? payload
@@ -435,7 +436,7 @@ const RuleManagementPage = () => {
       return
     }
     setLoadingRules(true)
-    setRuleValues((prev) => ({ ...prev, token: deviceToken }))
+    setRuleValues({ ...defaultRuleState, token: deviceToken })
     try {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
