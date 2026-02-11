@@ -23,12 +23,37 @@ const statusStyles = {
 
 const LOG_TIMEZONE = 'Asia/Bangkok'
 
+const parseLocalTimestamp = (timestamp) => {
+  if (typeof timestamp !== 'string') return null
+  const match = timestamp.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/)
+  if (!match) return null
+  const [, year, month, day, hour, minute] = match
+  return {
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    hour: Number(hour),
+    minute: Number(minute),
+  }
+}
+
+const formatLocalParts = (parts) => {
+  if (!parts) return '--'
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0))
+  const datePart = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
+  const timePart = `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`
+  return `${datePart} @ ${timePart}`
+}
+
 const formatTimestamp = (timestamp) => {
-  const normalized =
-    typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(timestamp)
-      ? `${timestamp.replace(' ', 'T')}+07:00`
-      : timestamp
-  const date = new Date(normalized)
+  const localParts = parseLocalTimestamp(timestamp)
+  if (localParts) return formatLocalParts(localParts)
+  const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return '--'
   const datePart = new Intl.DateTimeFormat('en-US', {
     timeZone: LOG_TIMEZONE,
@@ -46,11 +71,9 @@ const formatTimestamp = (timestamp) => {
 }
 
 const formatTimestampForSearch = (timestamp) => {
-  const normalized =
-    typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(timestamp)
-      ? `${timestamp.replace(' ', 'T')}+07:00`
-      : timestamp
-  const date = new Date(normalized)
+  const localParts = parseLocalTimestamp(timestamp)
+  if (localParts) return formatLocalParts(localParts)
+  const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return ''
   return new Intl.DateTimeFormat('en-US', {
     timeZone: LOG_TIMEZONE,
