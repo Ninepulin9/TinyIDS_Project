@@ -107,7 +107,12 @@ const normalizeSocketLog = (data) => {
       payload.summary ??
       payload.alert_msg ??
       'No additional context provided.',
-    timestamp: data.created_at ?? data.timestamp ?? payload.timestamp ?? payload.time ?? new Date().toISOString(),
+    timestamp:
+      payload.timestamp ??
+      payload.time ??
+      data.created_at ??
+      data.timestamp ??
+      new Date().toISOString(),
     payload,
   }
 }
