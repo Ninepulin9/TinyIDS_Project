@@ -27,8 +27,10 @@ const BlacklistPage = () => {
   const [unblockTarget, setUnblockTarget] = useState(null)
   const pageSize = 15
   const retryRef = useRef({ timer: null, attempts: 0 })
+  const lastRequestRef = useRef({ time: 0 })
   const maxRetries = 5
   const retryDelayMs = 2000
+  const requestThrottleMs = 5000
 
   const normalizeBlockedList = (value) => {
     if (Array.isArray(value)) {
@@ -79,13 +81,20 @@ const BlacklistPage = () => {
 
       let mergedEntries = []
       if (tokenDevices.length) {
+        const now = Date.now()
+        const shouldRequest = now - lastRequestRef.current.time >= requestThrottleMs
+        if (shouldRequest) {
+          lastRequestRef.current.time = now
+        }
         await Promise.allSettled(
           tokenDevices.map((device) =>
-            api.post(`/api/devices/${device.id}/publish`, {
-              topic_base: 'esp/setting/Control',
-              message: `showsetting-${device.token}`,
-              append_token: false,
-            }),
+            shouldRequest
+              ? api.post(`/api/devices/${device.id}/publish`, {
+                  topic_base: 'esp/setting/Control',
+                  message: `showsetting-${device.token}`,
+                  append_token: false,
+                })
+              : Promise.resolve(),
           ),
         )
 

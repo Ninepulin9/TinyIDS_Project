@@ -160,6 +160,8 @@ const RuleManagementPage = () => {
   const [awaitingToken, setAwaitingToken] = useState('')
   const pollRef = useRef({ timer: null, attempts: 0 })
   const requestMetaRef = useRef({ token: '', requestedAt: 0 })
+  const lastSettingsRequestRef = useRef({ token: '', time: 0 })
+  const requestThrottleMs = 5000
   const [expanded, setExpanded] = useState(() =>
     ruleSections.reduce((acc, section, idx) => ({ ...acc, [section.id]: idx === 0 }), {})
   )
@@ -368,6 +370,14 @@ const RuleManagementPage = () => {
       toast.error('No token found for this device.')
       return
     }
+    const now = Date.now()
+    if (
+      lastSettingsRequestRef.current.token === deviceToken &&
+      now - lastSettingsRequestRef.current.time < requestThrottleMs
+    ) {
+      return
+    }
+    lastSettingsRequestRef.current = { token: deviceToken, time: now }
     requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
     setLoadingRules(true)
     setAwaitingToken(deviceToken)
@@ -434,6 +444,14 @@ const RuleManagementPage = () => {
       toast.error('No token found for this device.')
       return
     }
+    const now = Date.now()
+    if (
+      lastSettingsRequestRef.current.token === deviceToken &&
+      now - lastSettingsRequestRef.current.time < requestThrottleMs
+    ) {
+      return
+    }
+    lastSettingsRequestRef.current = { token: deviceToken, time: now }
     requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
     setLoadingRules(true)
     setRuleValues({ ...defaultRuleState, token: deviceToken })

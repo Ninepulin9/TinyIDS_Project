@@ -21,7 +21,39 @@ const statusStyles = {
   allowed: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
 }
 
-const formatTimestamp = (timestamp) => dayjs(timestamp).format('MMM D, YYYY @ HH:mm')
+const LOG_TIMEZONE = 'Asia/Bangkok'
+
+const formatTimestamp = (timestamp) => {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return '--'
+  const datePart = new Intl.DateTimeFormat('en-US', {
+    timeZone: LOG_TIMEZONE,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date)
+  const timePart = new Intl.DateTimeFormat('en-US', {
+    timeZone: LOG_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+  return `${datePart} @ ${timePart}`
+}
+
+const formatTimestampForSearch = (timestamp) => {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: LOG_TIMEZONE,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
 
 const normalizeSeverity = (value) => {
   if (!value) return 'Low'
@@ -218,6 +250,8 @@ const LogsPage = () => {
       const ts = dayjs(log.timestamp)
       const withinWindow = ts.isValid() ? ts.isAfter(cutoff) : true
       if (!withinWindow) return false
+      const typeLabel = String(log.type ?? '').trim().toLowerCase()
+      if (typeLabel === 'esp settings') return false
       if (!devicesLoaded || (tokenDeviceIds.size === 0 && tokenValues.size === 0)) return true
       if (tokenDeviceIds.has(log.device_id)) return true
       const payloadToken = log?.payload?.token ? String(log.payload.token) : ''
@@ -239,7 +273,7 @@ const LogsPage = () => {
         log.description,
         log.source_ip,
         log.destination_ip,
-        dayjs(log.timestamp).format('MMM D YYYY HH:mm'),
+        formatTimestampForSearch(log.timestamp),
       ]
         .join(' ')
         .toLowerCase()
