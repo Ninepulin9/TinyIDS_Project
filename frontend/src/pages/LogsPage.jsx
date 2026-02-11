@@ -212,7 +212,8 @@ const LogsPage = () => {
         const { data } = await api.get('/api/logs')
         if (!isMountedRef.current) return
         const records = Array.isArray(data) ? data : []
-        setLogs((prev) => mergeLogs(records, prev))
+        const normalized = records.map((record) => normalizeSocketLog(record)).filter(Boolean)
+        setLogs((prev) => mergeLogs(normalized, prev))
       } catch (err) {
         if (!isMountedRef.current) return
         const message =
