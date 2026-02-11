@@ -42,7 +42,11 @@ const BlacklistPage = () => {
   const dedupeDevices = (list) => {
     const byKey = new Map()
     list.forEach((device) => {
-      const key = device?.esp_id || device?.espId || device?.id
+      const key =
+        device?.esp_id ||
+        device?.espId ||
+        (device?.token ? `token:${device.token}` : null) ||
+        device?.id
       if (!key) return
       const existing = byKey.get(key)
       if (!existing) {
@@ -102,8 +106,8 @@ const BlacklistPage = () => {
       let keepLoading = false
       const devicesResponse = await api.get('/api/devices')
       const rawList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
-      const deviceList = dedupeDevices(rawList)
-      const tokenDevices = deviceList.filter((device) => device?.token)
+      const deviceList = dedupeDevices(rawList).filter((device) => device?.token)
+      const tokenDevices = deviceList
       setDevices(deviceList)
 
       let mergedEntries = []

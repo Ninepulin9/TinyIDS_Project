@@ -198,7 +198,11 @@ const LogsPage = () => {
   const dedupeDevices = useCallback((list) => {
     const byKey = new Map()
     list.forEach((device) => {
-      const key = device?.esp_id || device?.espId || device?.id
+      const key =
+        device?.esp_id ||
+        device?.espId ||
+        (device?.token ? `token:${device.token}` : null) ||
+        device?.id
       if (!key) return
       const existing = byKey.get(key)
       if (!existing) {
@@ -275,9 +279,9 @@ const LogsPage = () => {
       const { data } = await api.get('/api/devices')
       if (!isMountedRef.current) return
       const rawList = Array.isArray(data) ? data : []
-      const list = dedupeDevices(rawList)
+      const list = dedupeDevices(rawList).filter((device) => device?.token)
       setDeviceList(list)
-      const tokenDevices = list.filter((device) => device?.token)
+      const tokenDevices = list
       const ids = new Set(tokenDevices.map((device) => device.id))
       const tokens = new Set(tokenDevices.map((device) => String(device.token)))
       const nameMap = new Map(
