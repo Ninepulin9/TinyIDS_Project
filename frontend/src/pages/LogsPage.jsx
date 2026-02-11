@@ -329,16 +329,6 @@ const LogsPage = () => {
     logs.forEach((log) => {
       const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
       if (topic !== 'esp/setting/now') return
-      if (selectedDeviceId !== 'all') {
-        const directMatch = String(log.device_id ?? '') === String(selectedDeviceId)
-        if (!directMatch) {
-          const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
-          const mappedId = tokenValue ? tokenIdMap.get(tokenValue) : null
-          if (mappedId == null || String(mappedId) !== String(selectedDeviceId)) {
-            return
-          }
-        }
-      }
       const blocked = log?.payload?.blocked_ips ?? log?.payload?.BLOCKED_IPS
       const ips = normalizeBlockedList(blocked)
       ips.forEach((ip) => {
@@ -347,7 +337,7 @@ const LogsPage = () => {
       })
     })
     return set
-  }, [logs, selectedDeviceId, tokenIdMap])
+  }, [logs])
 
   const timeFilteredLogs = useMemo(() => {
     const windowDays = Number(timeframeDays) || 30
