@@ -180,7 +180,13 @@ const LogsPage = () => {
   const [devicesLoaded, setDevicesLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [timeframeDays, setTimeframeDays] = useState(30)
-  const [selectedDeviceId, setSelectedDeviceId] = useState('all')
+  const [selectedDeviceId, setSelectedDeviceId] = useState(() => {
+    try {
+      return localStorage.getItem('tinyids:selectedDeviceId') || 'all'
+    } catch {
+      return 'all'
+    }
+  })
   const [blacklistSet, setBlacklistSet] = useState(new Set())
   const [autoBlockEnabled, setAutoBlockEnabled] = useState(true)
   const [page, setPage] = useState(1)
@@ -304,6 +310,16 @@ const LogsPage = () => {
       }
     }
   }, [fetchLatest])
+
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key === 'tinyids:selectedDeviceId') {
+        setSelectedDeviceId(event.newValue || 'all')
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
 
   useEffect(() => {
     const socket = getSocket()
@@ -517,7 +533,15 @@ const LogsPage = () => {
             <div className="relative">
               <select
                 value={selectedDeviceId}
-                onChange={(event) => setSelectedDeviceId(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value
+                  setSelectedDeviceId(next)
+                  try {
+                    localStorage.setItem('tinyids:selectedDeviceId', String(next))
+                  } catch {
+                    // ignore storage errors
+                  }
+                }}
                 className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
               >
                 <option value="all">All devices</option>

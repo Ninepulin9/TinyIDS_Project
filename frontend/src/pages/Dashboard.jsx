@@ -173,7 +173,13 @@ const Dashboard = () => {
   const contextMac = selectedDevice?.mac_address ?? '?'
 
   const handleDeviceChange = (event) => {
-    setSelectedDeviceId(event.target.value)
+    const nextValue = event.target.value
+    setSelectedDeviceId(nextValue)
+    try {
+      localStorage.setItem('tinyids:selectedDeviceId', String(nextValue))
+    } catch {
+      // ignore storage errors
+    }
   }
 
   const devicesWithToken = useMemo(() => devices.filter((device) => device?.token), [devices])
