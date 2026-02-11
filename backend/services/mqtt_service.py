@@ -11,7 +11,7 @@ import paho.mqtt.client as mqtt
 from sqlalchemy import func
 
 from extensions import db, socketio
-from models import Blacklist, Device, DeviceNetworkProfile, DeviceToken, Log, User
+from models import Blacklist, Device, DeviceNetworkProfile, DeviceToken, Log, SystemSettings, User
 
 
 class MQTTService:

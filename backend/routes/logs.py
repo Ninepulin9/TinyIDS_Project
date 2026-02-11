@@ -65,11 +65,12 @@ def _serialize_log(log: Log) -> dict:
         "alert_msg",
         default="No additional context provided.",
     )
+    event_timestamp = _derive_field(payload, "timestamp", "time", "ts", "reported_at")
 
     return {
         "id": log.id,
         "device_name": device_name,
-        "timestamp": _to_utc_iso(log.created_at),
+        "timestamp": event_timestamp or _to_utc_iso(log.created_at),
         "severity": _normalize_severity(log.severity),
         "type": event_type,
         "alert_msg": alert_msg,

@@ -133,6 +133,47 @@ const BlacklistPage = () => {
         mergedEntries = settingsEntries
       }
 
+      if (!mergedEntries.length) {
+        try {
+          const { data: logData } = await api.get('/api/logs')
+          const logs = Array.isArray(logData) ? logData : []
+          const latestSetting = logs.find((log) => {
+            const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
+            return topic === 'esp/setting/now'
+          })
+          if (latestSetting?.payload) {
+            const blocked = latestSetting.payload.blocked_ips ?? latestSetting.payload.BLOCKED_IPS
+            const ips = normalizeBlockedList(blocked)
+            if (ips.length) {
+              const seenIps = new Set()
+              mergedEntries = ips
+                .filter((ip) => isValidIp(ip))
+                .filter((ip) => {
+                  const key = ip.toLowerCase()
+                  if (seenIps.has(key)) return false
+                  seenIps.add(key)
+                  return true
+                })
+                .map((ip) => ({
+                  id: `settings-log-${ip.toLowerCase()}`,
+                  device_id: latestSetting.device_id,
+                  device_name: latestSetting.device_name ?? 'ESP32',
+                  ip_address: ip,
+                  reason: 'ESP settings',
+                  created_at:
+                    latestSetting.payload.time ??
+                    latestSetting.payload.timestamp ??
+                    latestSetting.timestamp ??
+                    new Date().toISOString(),
+                  readOnly: true,
+                }))
+            }
+          }
+        } catch {
+          // ignore log fallback errors
+        }
+      }
+
       if (tokenDevices.length && mergedEntries.length === 0 && retryRef.current.attempts < maxRetries) {
         retryRef.current.attempts += 1
         keepLoading = true
