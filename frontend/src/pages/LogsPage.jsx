@@ -3,7 +3,6 @@ import { Filter, Search, ShieldAlert } from 'lucide-react'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts'
-import toast from 'react-hot-toast'
 
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
@@ -187,6 +186,7 @@ const LogsPage = () => {
       return 'all'
     }
   })
+  const [blockedByDevice, setBlockedByDevice] = useState(new Map())
   const [page, setPage] = useState(1)
   const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
@@ -228,6 +228,42 @@ const LogsPage = () => {
   }
 
   const isValidIp = (value) => /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(value).trim())
+
+  const loadBlockedFromSettings = useCallback(
+    async (list = deviceList) => {
+      if (!list.length) {
+        setBlockedByDevice(new Map())
+        return
+      }
+
+      try {
+        const results = await Promise.allSettled(
+          list.map((device) => api.get(`/api/devices/${device.id}/settings/latest`)),
+        )
+
+        if (!isMountedRef.current) return
+
+        const nextMap = new Map()
+        results.forEach((result, index) => {
+          if (result.status !== 'fulfilled') return
+          const payload = result.value?.data
+          if (!payload || typeof payload !== 'object') return
+          const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
+          const ips = normalizeBlockedList(blocked)
+            .filter((ip) => isValidIp(ip))
+            .map((ip) => ip.toLowerCase())
+          if (!ips.length) return
+          const device = list[index]
+          nextMap.set(String(device.id), new Set(ips))
+        })
+
+        setBlockedByDevice(nextMap)
+      } catch {
+        // ignore
+      }
+    },
+    [deviceList],
+  )
 
   const fetchLatest = useCallback(
     async ({ silent = false } = {}) => {
@@ -314,6 +350,22 @@ const LogsPage = () => {
       const normalized = normalizeSocketLog(payload)
       if (!normalized) return
       setLogs((prev) => mergeLogs([normalized], prev))
+      const topic = String(normalized?.payload?._mqtt_topic ?? '').toLowerCase()
+      if (topic === 'esp/setting/now') {
+        const tokenValue = normalized?.payload?.token ? String(normalized.payload.token) : ''
+        const deviceId = tokenValue ? tokenIdMap.get(tokenValue) : null
+        const blocked = normalized?.payload?.blocked_ips ?? normalized?.payload?.BLOCKED_IPS
+        const ips = normalizeBlockedList(blocked)
+          .filter((ip) => isValidIp(ip))
+          .map((ip) => ip.toLowerCase())
+        if (deviceId && ips.length) {
+          setBlockedByDevice((prev) => {
+            const next = new Map(prev)
+            next.set(String(deviceId), new Set(ips))
+            return next
+          })
+        }
+      }
     }
 
     socket.on('log:new', handleLogNew)
@@ -322,22 +374,24 @@ const LogsPage = () => {
       socket.off('log:new', handleLogNew)
       socket.off('device:registered', fetchDevices)
     }
-  }, [fetchDevices])
+  }, [fetchDevices, tokenIdMap])
+
+  useEffect(() => {
+    if (!deviceList.length) return
+    loadBlockedFromSettings(deviceList)
+  }, [deviceList, loadBlockedFromSettings])
 
   const blockedIpSet = useMemo(() => {
-    const set = new Set()
-    logs.forEach((log) => {
-      const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
-      if (topic !== 'esp/setting/now') return
-      const blocked = log?.payload?.blocked_ips ?? log?.payload?.BLOCKED_IPS
-      const ips = normalizeBlockedList(blocked)
-      ips.forEach((ip) => {
-        if (!isValidIp(ip)) return
-        set.add(ip.toLowerCase())
-      })
+    if (!blockedByDevice.size) return new Set()
+    if (selectedDeviceId !== 'all') {
+      return blockedByDevice.get(String(selectedDeviceId)) ?? new Set()
+    }
+    const combined = new Set()
+    blockedByDevice.forEach((set) => {
+      set.forEach((ip) => combined.add(ip))
     })
-    return set
-  }, [logs])
+    return combined
+  }, [blockedByDevice, selectedDeviceId])
 
   const timeFilteredLogs = useMemo(() => {
     const windowDays = Number(timeframeDays) || 30
