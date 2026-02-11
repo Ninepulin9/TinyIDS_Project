@@ -174,6 +174,7 @@ const LogsPage = () => {
   const [error, setError] = useState('')
   const [tokenDeviceIds, setTokenDeviceIds] = useState(new Set())
   const [tokenValues, setTokenValues] = useState(new Set())
+  const [tokenNameMap, setTokenNameMap] = useState(new Map())
   const [devicesLoaded, setDevicesLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [timeframeDays, setTimeframeDays] = useState(30)
@@ -239,8 +240,12 @@ const LogsPage = () => {
       const tokenDevices = list.filter((device) => device?.token)
       const ids = new Set(tokenDevices.map((device) => device.id))
       const tokens = new Set(tokenDevices.map((device) => String(device.token)))
+      const nameMap = new Map(
+        tokenDevices.map((device) => [String(device.token), device.device_name ?? device.name ?? 'ESP32']),
+      )
       setTokenDeviceIds(ids)
       setTokenValues(tokens)
+      setTokenNameMap(nameMap)
       setDevicesLoaded(true)
     } catch {
       if (!isMountedRef.current) return
@@ -522,10 +527,13 @@ const LogsPage = () => {
                     : statusStyles.allowed ?? 'bg-slate-100 text-slate-600 ring-slate-200'
                   const typeLabel = String(log.type ?? '')
                   const isSettings = typeLabel.trim().toLowerCase() === 'esp settings'
+                  const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
+                  const mappedName = tokenValue ? tokenNameMap.get(tokenValue) : null
+                  const displayName = log.device_name === 'Unknown' && mappedName ? mappedName : log.device_name
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/70">
                       <td className="px-4 py-3 font-medium text-slate-700">{formatTimestamp(log.timestamp)}</td>
-                      <td className="px-4 py-3 text-slate-600">{log.device_name}</td>
+                      <td className="px-4 py-3 text-slate-600">{displayName}</td>
                       <td className={`px-4 py-3 font-semibold ${isSettings ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {typeLabel || 'Unknown'}
                       </td>
