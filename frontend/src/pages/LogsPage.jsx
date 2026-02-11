@@ -24,7 +24,11 @@ const statusStyles = {
 const LOG_TIMEZONE = 'Asia/Bangkok'
 
 const formatTimestamp = (timestamp) => {
-  const date = new Date(timestamp)
+  const normalized =
+    typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(timestamp)
+      ? `${timestamp.replace(' ', 'T')}+07:00`
+      : timestamp
+  const date = new Date(normalized)
   if (Number.isNaN(date.getTime())) return '--'
   const datePart = new Intl.DateTimeFormat('en-US', {
     timeZone: LOG_TIMEZONE,
@@ -42,7 +46,11 @@ const formatTimestamp = (timestamp) => {
 }
 
 const formatTimestampForSearch = (timestamp) => {
-  const date = new Date(timestamp)
+  const normalized =
+    typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(timestamp)
+      ? `${timestamp.replace(' ', 'T')}+07:00`
+      : timestamp
+  const date = new Date(normalized)
   if (Number.isNaN(date.getTime())) return ''
   return new Intl.DateTimeFormat('en-US', {
     timeZone: LOG_TIMEZONE,
