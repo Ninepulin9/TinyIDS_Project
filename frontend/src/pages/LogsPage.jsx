@@ -323,7 +323,7 @@ const LogsPage = () => {
     isMountedRef.current = true
     fetchLatest({ silent: false })
     fetchDevices()
-    pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 4000)
+    pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 15000)
     return () => {
       isMountedRef.current = false
       if (pollIntervalRef.current) {
@@ -350,6 +350,7 @@ const LogsPage = () => {
       const normalized = normalizeSocketLog(payload)
       if (!normalized) return
       setLogs((prev) => mergeLogs([normalized], prev))
+      fetchLatest({ silent: true }).catch(() => {})
       const topic = String(normalized?.payload?._mqtt_topic ?? '').toLowerCase()
       if (topic === 'esp/setting/now') {
         const tokenValue = normalized?.payload?.token ? String(normalized.payload.token) : ''

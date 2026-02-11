@@ -9,60 +9,53 @@ import { getSocket } from '../lib/socket'
 
 const metricCards = [
   {
-    title: 'Total Detected Attacks',
+    title: 'Alerts (Last 24h)',
     key: 'detectedAttacks',
     icon: Shield,
     accent: 'text-sky-600 bg-sky-50',
-    description: 'Intrusion events TinyIDS automatically blocked across the fleet.',
+    description: 'Total intrusion events received in the last 24 hours.',
     settingKey: 'total_detected_attacks',
   },
   {
-    title: 'Total Packets Analyzed',
-    key: 'packetsAnalyzed',
-    icon: PackageSearch,
-    accent: 'text-indigo-600 bg-indigo-50',
-    description: 'Inbound packets inspected by ESP32 sensors and backend engines.',
-    settingKey: 'total_packets_analyzed',
+    title: 'High Severity (Last 24h)',
+    key: 'alertsTriggered',
+    icon: AlertTriangle,
+    accent: 'text-rose-600 bg-rose-50',
+    description: 'Critical alerts that need immediate attention.',
+    settingKey: 'alerts_triggered',
   },
   {
-    title: 'Detection Accuracy (%)',
+    title: 'Unique Source IPs (24h)',
     key: 'detectionAccuracy',
     icon: BarChart3,
-    accent: 'text-emerald-600 bg-emerald-50',
-    description: 'Signal-to-noise ratio of detection rules for the selected window.',
+    accent: 'text-amber-600 bg-amber-50',
+    description: 'Distinct attacker IPs observed in the last 24 hours.',
     settingKey: 'detection_accuracy_pct',
   },
   {
-    title: 'Device Activity (%)',
+    title: 'Blocked IPs',
+    key: 'packetsCaptured',
+    icon: Boxes,
+    accent: 'text-emerald-600 bg-emerald-50',
+    description: 'Total IPs currently blocked in TinyIDS.',
+    settingKey: 'packets_captured',
+  },
+  {
+    title: 'Devices Online (%)',
     key: 'deviceActivity',
     icon: Activity,
     accent: 'text-teal-600 bg-teal-50',
-    description: 'Share of ESP32 units currently online and reporting telemetry.',
+    description: 'Percentage of ESP32 sensors online right now.',
     settingKey: 'device_activity_pct',
+    isPercentage: true,
   },
   {
-    title: 'Alerts Triggered',
-    key: 'alertsTriggered',
-    icon: AlertTriangle,
-    accent: 'text-amber-600 bg-amber-50',
-    description: 'Automated notifications dispatched to analysts and systems.',
-    settingKey: 'alerts_triggered',
-  },
-  // {
-  //   title: 'Rule Activation (%)',
-  //   key: 'ruleActivation',
-  //   icon: ListChecks,
-  //   accent: 'text-purple-600 bg-purple-50',
-  //   description: 'Percentage of IDS signatures currently active across devices.',
-  //   settingKey: 'rule_activation_pct',
-  // },
-  {
-    title: 'Packets Captured',
-    key: 'packetsCaptured',
-    icon: Boxes,
-    accent: 'text-rose-600 bg-rose-50',
-    description: 'Raw traffic samples stored for retrospective analysis.',
-    settingKey: 'packets_captured',
+    title: 'Total Alerts (All time)',
+    key: 'packetsAnalyzed',
+    icon: PackageSearch,
+    accent: 'text-indigo-600 bg-indigo-50',
+    description: 'All intrusion events stored in the system.',
+    settingKey: 'total_packets_analyzed',
   },
 ]
 
@@ -71,6 +64,12 @@ const formatNumber = (value) => {
   if (value > 999999) return `${(value / 1000000).toFixed(1)}M`
   if (value > 999) return `${(value / 1000).toFixed(1)}K`
   return value.toLocaleString()
+}
+
+const formatMetricValue = (value, isPercentage) => {
+  if (value == null) return '--'
+  if (isPercentage) return `${value}%`
+  return formatNumber(value)
 }
 
 const defaultWidgetVisibility = {
@@ -188,6 +187,12 @@ const Dashboard = () => {
   const nodesOnline = selectedDevice ? (selectedDevice.active ? 1 : 0) : aggregatedOnline
   const nodesDisplay = selectedDevice ? (selectedDevice.active ? 'Online' : 'Offline') : `${nodesOnline}/${totalDevices}`
   const alertsTriggered = metrics.totals?.alertsTriggered ?? 0
+  const alertsLast24h = metrics.totals?.detectedAttacks ?? 0
+  const uniqueSources24h = metrics.totals?.detectionAccuracy ?? 0
+  const blockedIps = metrics.totals?.packetsCaptured ?? 0
+  const totalAlerts = metrics.totals?.packetsAnalyzed ?? 0
+  const lastAlertAt = metrics.totals?.lastAlertAt
+  const lastAlertLabel = lastAlertAt ? new Date(lastAlertAt).toLocaleString() : '--'
   const showTrendChart = widgetVisibility.detection_trend_pct !== false
   const showSensorCard = widgetVisibility.sensor_health_card !== false
   const showDataPipeline = widgetVisibility.data_pipeline_card !== false
@@ -214,11 +219,9 @@ const Dashboard = () => {
     pdf.text(`Current Threat Level: ${metrics.totals?.threatLevel ?? 0}%`, 14, 56)
     pdf.text('Prepared by: TinyIDS Security Operations Center', 14, 62)
 
-    const metricRows = visibleMetricCards.map(({ title, key, description }) => {
+    const metricRows = visibleMetricCards.map(({ title, key, description, isPercentage }) => {
       const rawValue = metrics.totals?.[key] ?? metrics.widgets?.[key]
-      const isPercentage = key.includes('Accuracy') || key.includes('Activity') || key.includes('Activation')
-      const displayValue =
-        rawValue == null ? '--' : isPercentage ? `${rawValue}%` : formatNumber(rawValue)
+      const displayValue = formatMetricValue(rawValue, isPercentage)
       return [title, displayValue, description]
     })
 
@@ -311,11 +314,9 @@ const Dashboard = () => {
         )}
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {visibleMetricCards.map(({ title, key, icon: Icon, accent, description, settingKey }) => {
+          {visibleMetricCards.map(({ title, key, icon: Icon, accent, description, isPercentage }) => {
             const rawValue = metrics.totals?.[key] ?? metrics.widgets?.[key]
-            const isPercentage = key.includes('Accuracy') || key.includes('Activity') || key.includes('Activation')
-            const displayValue =
-              rawValue == null ? '--' : isPercentage ? `${rawValue}%` : formatNumber(rawValue)
+            const displayValue = formatMetricValue(rawValue, isPercentage)
 
             return (
               <div key={key} className="rounded-2xl bg-white p-5 shadow-sm">
@@ -342,24 +343,26 @@ const Dashboard = () => {
               <div className="rounded-2xl bg-white p-6 shadow-sm">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Detection Trend</p>
-                    <p className="text-lg font-semibold text-slate-900">Events observed via MQTT ingestion</p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Alert Trend</p>
+                    <p className="text-lg font-semibold text-slate-900">Alerts observed in the last 12 days</p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {DASHBOARD_TIMEFRAMES.map((frame) => (
-                      <button
-                        key={frame}
-                        onClick={() => setTimeframe(frame)}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
-                          timeframe === frame
-                            ? 'border-sky-500 bg-sky-50 text-sky-600'
-                            : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-                        }`}
-                      >
-                        {frame}
-                      </button>
-                    ))}
-                  </div>
+                  {DASHBOARD_TIMEFRAMES.length > 1 && (
+                    <div className="flex flex-wrap gap-2">
+                      {DASHBOARD_TIMEFRAMES.map((frame) => (
+                        <button
+                          key={frame}
+                          onClick={() => setTimeframe(frame)}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
+                            timeframe === frame
+                              ? 'border-sky-500 bg-sky-50 text-sky-600'
+                              : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                          }`}
+                        >
+                          {frame}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-4 h-72">
                   <ResponsiveContainer width="100%" height="100%">
@@ -387,30 +390,34 @@ const Dashboard = () => {
                 <div className="flex items-center gap-3">
                   <CircuitBoard className="h-10 w-10 text-slate-400" />
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">System Health</p>
-                    <p className="text-lg font-semibold">Sensor Fleet Status</p>
-                  </div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">System Health</p>
+                  <p className="text-lg font-semibold">ESP32 Fleet Status</p>
                 </div>
-                <ul className="mt-4 space-y-3 text-sm">
+              </div>
+              <ul className="mt-4 space-y-3 text-sm">
+                <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                  <span className="text-slate-500">{selectedDevice ? 'Device Status' : 'ESP32 Nodes Online'}</span>
+                  <span className="font-semibold text-slate-900">{nodesDisplay}</span>
+                </li>
+                <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                  <span className="text-slate-500">Threat Level (24h)</span>
+                  <span className="font-semibold text-slate-900">{metrics.totals?.threatLevel ?? 0}%</span>
+                </li>
+                <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                  <span className="text-slate-500">Alerts (24h)</span>
+                  <span className="font-semibold text-slate-900">{alertsLast24h}</span>
+                </li>
+                <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                  <span className="text-slate-500">Last Alert Seen</span>
+                  <span className="font-semibold text-slate-900">{lastAlertLabel}</span>
+                </li>
+                {selectedDevice && (
                   <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                    <span className="text-slate-500">{selectedDevice ? 'Device Status' : 'ESP32 Nodes Online'}</span>
-                    <span className="font-semibold text-slate-900">{nodesDisplay}</span>
+                    <span className="text-slate-500">Device MAC</span>
+                    <span className="font-semibold text-slate-900">{contextMac}</span>
                   </li>
-                  <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                    <span className="text-slate-500">Rules Active</span>
-                    <span className="font-semibold text-slate-900">{metrics.totals?.ruleActivation ?? '--'}%</span>
-                  </li>
-                  <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                    <span className="text-slate-500">Alerts Triggered (24h)</span>
-                    <span className="font-semibold text-slate-900">{alertsTriggered}</span>
-                  </li>
-                  {selectedDevice && (
-                    <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                      <span className="text-slate-500">Device MAC</span>
-                      <span className="font-semibold text-slate-900">{contextMac}</span>
-                    </li>
-                  )}
-                </ul>
+                )}
+              </ul>
               </div>
             )}
 
@@ -419,34 +426,30 @@ const Dashboard = () => {
                 <div className="flex items-center gap-3">
                   <Activity className="h-10 w-10 text-slate-400" />
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Data Pipeline</p>
-                    <p className="text-lg font-semibold">Packets &amp; Throughput</p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Attack Insights</p>
+                    <p className="text-lg font-semibold">Live threat breakdown</p>
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
                   <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Packets Captured</p>
-                    <p className="text-xl font-semibold text-slate-900">
-                      {formatNumber(metrics.totals?.packetsCaptured)}
-                    </p>
+                    <p className="text-slate-500">High Severity (24h)</p>
+                    <p className="text-xl font-semibold text-rose-600">{formatNumber(alertsTriggered)}</p>
                   </div>
                   <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Packets Analyzed</p>
-                    <p className="text-xl font-semibold text-slate-900">
-                      {formatNumber(metrics.totals?.packetsAnalyzed)}
-                    </p>
+                    <p className="text-slate-500">Unique Source IPs (24h)</p>
+                    <p className="text-xl font-semibold text-amber-600">{formatNumber(uniqueSources24h)}</p>
                   </div>
                   <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Detection Accuracy</p>
-                    <p className="text-xl font-semibold text-emerald-600">
-                      {metrics.totals?.detectionAccuracy ?? '--'}%
-                    </p>
+                    <p className="text-slate-500">Alerts (24h)</p>
+                    <p className="text-xl font-semibold text-slate-900">{formatNumber(alertsLast24h)}</p>
                   </div>
                   <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Device Activity</p>
-                    <p className="text-xl font-semibold text-sky-600">
-                      {metrics.totals?.deviceActivity ?? '--'}%
-                    </p>
+                    <p className="text-slate-500">Blocked IPs</p>
+                    <p className="text-xl font-semibold text-emerald-600">{formatNumber(blockedIps)}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 px-4 py-3">
+                    <p className="text-slate-500">Total Alerts (All time)</p>
+                    <p className="text-xl font-semibold text-slate-900">{formatNumber(totalAlerts)}</p>
                   </div>
                 </div>
               </div>

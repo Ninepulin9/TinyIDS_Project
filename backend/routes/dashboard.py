@@ -7,7 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from extensions import db
-from models import Device, Log
+from models import Blacklist, Device, Log
 
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
@@ -76,53 +76,72 @@ def _build_trend_data(base_query):
     ]
 
 
-def _compute_totals(base_query, device=None, total_devices=0, active_devices=0):
-    severity_rows = base_query.with_entities(func.lower(Log.severity), func.count(Log.id)).group_by(
-        func.lower(Log.severity)
-    )
-    severity_counts = {row[0] or "info": row[1] for row in severity_rows}
-    total_logs = sum(severity_counts.values())
+def _compute_totals(base_query, user_id: int, device=None, total_devices=0, active_devices=0):
+    now = datetime.utcnow().replace(tzinfo=timezone.utc)
+    recent_window = now - timedelta(hours=24)
+    recent_query = base_query.filter(Log.created_at >= recent_window)
 
-    high_events = sum(
-        count for level, count in severity_counts.items() if level in {"high", "critical", "severe", "error"}
+    total_logs = base_query.with_entities(func.count(Log.id)).scalar() or 0
+    alerts_24h = recent_query.with_entities(func.count(Log.id)).scalar() or 0
+
+    high_events = (
+        recent_query.with_entities(func.count(Log.id))
+        .filter(func.lower(Log.severity).in_(["high", "critical", "severe", "error"]))
+        .scalar()
+        or 0
     )
-    medium_events = severity_counts.get("medium", 0)
+
+    unique_sources = (
+        recent_query.with_entities(Log.source_ip)
+        .filter(Log.source_ip.isnot(None))
+        .filter(Log.source_ip != "")
+        .distinct()
+        .count()
+    )
+
+    blocked_count = (
+        Blacklist.query.filter(Blacklist.user_id == user_id)
+        .with_entities(func.count(Blacklist.id))
+        .scalar()
+        or 0
+    )
+
+    last_alert_at_row = (
+        base_query.with_entities(Log.created_at)
+        .order_by(Log.created_at.desc())
+        .first()
+    )
+    last_alert_at = last_alert_at_row[0] if last_alert_at_row else None
 
     threat_percent = 0
-    if total_logs:
-        threat_percent = min(100, int((high_events / total_logs) * 100))
+    if alerts_24h:
+        threat_percent = min(100, int((high_events / alerts_24h) * 100))
 
     if device:
         active_ratio = 100 if device.is_active else 0
     else:
-        active_ratio = 0
-        if total_devices:
-            active_ratio = int((active_devices / total_devices) * 100)
-
-    detection_accuracy = 100 - min(60, threat_percent // 2)
-    packets_analyzed = total_logs * 24
-    packets_captured = total_logs * 6
-    alerts_triggered = high_events + medium_events
+        active_ratio = int((active_devices / total_devices) * 100) if total_devices else 0
 
     totals = {
-        "detectedAttacks": total_logs,
-        "packetsAnalyzed": packets_analyzed,
-        "detectionAccuracy": detection_accuracy,
+        "detectedAttacks": alerts_24h,
+        "packetsAnalyzed": total_logs,
+        "detectionAccuracy": unique_sources,
         "deviceActivity": active_ratio,
-        "alertsTriggered": alerts_triggered,
+        "alertsTriggered": high_events,
         "ruleActivation": 100,
-        "packetsCaptured": packets_captured,
+        "packetsCaptured": blocked_count,
         "threatLevel": threat_percent,
+        "lastAlertAt": last_alert_at.isoformat().replace("+00:00", "Z") if last_alert_at else None,
     }
 
     widgets = {
-        "totalDetectedAttacks": total_logs,
-        "totalPacketsAnalyzed": packets_analyzed,
-        "detectionAccuracy": detection_accuracy,
+        "totalDetectedAttacks": alerts_24h,
+        "totalPacketsAnalyzed": total_logs,
+        "detectionAccuracy": unique_sources,
         "deviceActivity": active_ratio,
-        "alertsTriggered": alerts_triggered,
+        "alertsTriggered": high_events,
         "ruleActivation": 100,
-        "packetsCaptured": packets_captured,
+        "packetsCaptured": blocked_count,
     }
 
     return totals, widgets
@@ -167,7 +186,13 @@ def dashboard_overview():
             None,
         )
 
-    totals, widgets = _compute_totals(base_query, device=selected_device, total_devices=total_devices, active_devices=active_devices)
+    totals, widgets = _compute_totals(
+        base_query,
+        user_id=user_id,
+        device=selected_device,
+        total_devices=total_devices,
+        active_devices=active_devices,
+    )
     trends = {
         "days": _build_trend_data(base_query),
         "minutes": [{"label": f"{idx * 5}m", "value": 0} for idx in range(12)],

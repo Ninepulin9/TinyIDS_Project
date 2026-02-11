@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import api from '../lib/api'
 
-export const DASHBOARD_TIMEFRAMES = ['seconds', 'minutes', 'hours', 'days', 'months']
+export const DASHBOARD_TIMEFRAMES = ['days']
 const AUTO_REFRESH_INTERVAL_MS = 4 * 1000
 
 const createEmptyTrends = () => ({
@@ -22,6 +22,7 @@ const defaultTotals = {
   ruleActivation: 0,
   packetsCaptured: 0,
   threatLevel: 0,
+  lastAlertAt: null,
 }
 
 const defaultWidgets = {
