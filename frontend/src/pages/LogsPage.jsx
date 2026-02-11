@@ -187,8 +187,6 @@ const LogsPage = () => {
       return 'all'
     }
   })
-  const [blacklistSet, setBlacklistSet] = useState(new Set())
-  const [autoBlockEnabled, setAutoBlockEnabled] = useState(true)
   const [page, setPage] = useState(1)
   const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
@@ -218,32 +216,18 @@ const LogsPage = () => {
     return Array.from(byKey.values())
   }, [])
 
-  const fetchBlacklist = useCallback(async () => {
-    try {
-      const { data } = await api.get('/api/blacklist')
-      if (!isMountedRef.current) return
-      if (Array.isArray(data)) {
-        const next = new Set(
-          data
-            .map((entry) => entry?.ip_address)
-            .filter(Boolean)
-            .map((ip) => String(ip).trim().toLowerCase()),
-        )
-        setBlacklistSet(next)
-      }
-    } catch {
-      // silent; fallback to existing set
+  const normalizeBlockedList = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item).trim()).filter(Boolean)
     }
-  }, [])
+    if (value == null) return []
+    return String(value)
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
 
-  const fetchSystemSettings = useCallback(async () => {
-    try {
-      const { data } = await api.get('/api/settings/system')
-      setAutoBlockEnabled(Boolean(data?.auto_block_enabled))
-    } catch {
-      setAutoBlockEnabled(true)
-    }
-  }, [])
+  const isValidIp = (value) => /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(value).trim())
 
   const fetchLatest = useCallback(
     async ({ silent = false } = {}) => {
@@ -302,8 +286,6 @@ const LogsPage = () => {
   useEffect(() => {
     isMountedRef.current = true
     fetchLatest({ silent: false })
-    fetchBlacklist()
-    fetchSystemSettings()
     fetchDevices()
     pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 4000)
     return () => {
@@ -341,6 +323,31 @@ const LogsPage = () => {
       socket.off('device:registered', fetchDevices)
     }
   }, [fetchDevices])
+
+  const blockedIpSet = useMemo(() => {
+    const set = new Set()
+    logs.forEach((log) => {
+      const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
+      if (topic !== 'esp/setting/now') return
+      if (selectedDeviceId !== 'all') {
+        const directMatch = String(log.device_id ?? '') === String(selectedDeviceId)
+        if (!directMatch) {
+          const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
+          const mappedId = tokenValue ? tokenIdMap.get(tokenValue) : null
+          if (mappedId == null || String(mappedId) !== String(selectedDeviceId)) {
+            return
+          }
+        }
+      }
+      const blocked = log?.payload?.blocked_ips ?? log?.payload?.BLOCKED_IPS
+      const ips = normalizeBlockedList(blocked)
+      ips.forEach((ip) => {
+        if (!isValidIp(ip)) return
+        set.add(ip.toLowerCase())
+      })
+    })
+    return set
+  }, [logs, selectedDeviceId, tokenIdMap])
 
   const timeFilteredLogs = useMemo(() => {
     const windowDays = Number(timeframeDays) || 30
@@ -611,7 +618,7 @@ const LogsPage = () => {
               ) : (
                 pagedLogs.map((log) => {
                   const ipKey = String(log.source_ip ?? '').trim().toLowerCase()
-                  const isBlocked = ipKey && blacklistSet.has(ipKey)
+                  const isBlocked = ipKey && blockedIpSet.has(ipKey)
                   const statusClass = isBlocked
                     ? statusStyles.blocked
                     : statusStyles.allowed ?? 'bg-slate-100 text-slate-600 ring-slate-200'
