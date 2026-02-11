@@ -532,7 +532,7 @@ const LogsPage = () => {
               ) : (
                 pagedLogs.map((log) => {
                   const ipKey = String(log.source_ip ?? '').trim().toLowerCase()
-                  const isBlocked = autoBlockEnabled && ipKey && blacklistSet.has(ipKey)
+                  const isBlocked = ipKey && blacklistSet.has(ipKey)
                   const statusClass = isBlocked
                     ? statusStyles.blocked
                     : statusStyles.allowed ?? 'bg-slate-100 text-slate-600 ring-slate-200'
