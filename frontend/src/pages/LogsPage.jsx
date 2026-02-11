@@ -72,12 +72,28 @@ const normalizeSocketLog = (data) => {
   }
 }
 
+const buildSignature = (log) => {
+  const ts = log?.timestamp ? dayjs(log.timestamp).format('YYYY-MM-DD HH:mm:ss') : ''
+  const device = log?.device_id ?? log?.device_name ?? ''
+  const type = log?.type ?? ''
+  const msg = log?.alert_msg ?? log?.description ?? ''
+  const source = log?.source_ip ?? ''
+  return [device, type, msg, source, ts].map((part) => String(part).trim()).join('|')
+}
+
 const mergeLogs = (incoming, existing) => {
   const combined = [...incoming, ...existing].filter(Boolean)
   const byId = new Map()
+  const bySignature = new Set()
   for (const log of combined) {
-    if (log?.id == null || byId.has(log.id)) continue
+    const signature = buildSignature(log)
+    if (signature && bySignature.has(signature)) continue
+    if (log?.id == null || byId.has(log.id)) {
+      if (signature) bySignature.add(signature)
+      continue
+    }
     byId.set(log.id, log)
+    if (signature) bySignature.add(signature)
   }
   return Array.from(byId.values())
     .sort((left, right) => dayjs(right.timestamp).valueOf() - dayjs(left.timestamp).valueOf())
