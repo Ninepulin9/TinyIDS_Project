@@ -175,9 +175,12 @@ const LogsPage = () => {
   const [tokenDeviceIds, setTokenDeviceIds] = useState(new Set())
   const [tokenValues, setTokenValues] = useState(new Set())
   const [tokenNameMap, setTokenNameMap] = useState(new Map())
+  const [tokenIdMap, setTokenIdMap] = useState(new Map())
+  const [deviceList, setDeviceList] = useState([])
   const [devicesLoaded, setDevicesLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [timeframeDays, setTimeframeDays] = useState(30)
+  const [selectedDeviceId, setSelectedDeviceId] = useState('all')
   const [blacklistSet, setBlacklistSet] = useState(new Set())
   const [autoBlockEnabled, setAutoBlockEnabled] = useState(true)
   const [page, setPage] = useState(1)
@@ -247,15 +250,18 @@ const LogsPage = () => {
       const { data } = await api.get('/api/devices')
       if (!isMountedRef.current) return
       const list = Array.isArray(data) ? data : []
+      setDeviceList(list)
       const tokenDevices = list.filter((device) => device?.token)
       const ids = new Set(tokenDevices.map((device) => device.id))
       const tokens = new Set(tokenDevices.map((device) => String(device.token)))
       const nameMap = new Map(
         tokenDevices.map((device) => [String(device.token), device.device_name ?? device.name ?? 'ESP32']),
       )
+      const idMap = new Map(tokenDevices.map((device) => [String(device.token), device.id]))
       setTokenDeviceIds(ids)
       setTokenValues(tokens)
       setTokenNameMap(nameMap)
+      setTokenIdMap(idMap)
       setDevicesLoaded(true)
     } catch {
       if (!isMountedRef.current) return
@@ -313,12 +319,23 @@ const LogsPage = () => {
   }, [logs, timeframeDays, devicesLoaded, tokenDeviceIds, tokenValues])
 
   const filteredLogs = useMemo(() => {
+    const filteredByDevice =
+      selectedDeviceId === 'all'
+        ? timeFilteredLogs
+        : timeFilteredLogs.filter((log) => {
+            const directMatch = String(log.device_id ?? '') === String(selectedDeviceId)
+            if (directMatch) return true
+            const payloadToken = log?.payload?.token ? String(log.payload.token) : ''
+            const mappedId = payloadToken ? tokenIdMap.get(payloadToken) : null
+            return mappedId != null && String(mappedId) === String(selectedDeviceId)
+          })
+
     if (!query.trim()) {
-      return timeFilteredLogs
+      return filteredByDevice
     }
 
     const lowerQuery = query.trim().toLowerCase()
-    return timeFilteredLogs.filter((log) => {
+    return filteredByDevice.filter((log) => {
       const haystack = [
         log.device_name,
         log.severity,
@@ -332,11 +349,11 @@ const LogsPage = () => {
         .toLowerCase()
       return haystack.includes(lowerQuery)
     })
-  }, [timeFilteredLogs, query])
+  }, [timeFilteredLogs, query, selectedDeviceId, tokenIdMap])
 
   useEffect(() => {
     setPage(1)
-  }, [query, timeframeDays, timeFilteredLogs.length])
+  }, [query, timeframeDays, timeFilteredLogs.length, selectedDeviceId])
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize))
   const pageSafe = Math.min(page, totalPages)
@@ -476,6 +493,20 @@ const LogsPage = () => {
                   Last {days} days
                 </button>
               ))}
+            </div>
+            <div className="relative">
+              <select
+                value={selectedDeviceId}
+                onChange={(event) => setSelectedDeviceId(event.target.value)}
+                className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+              >
+                <option value="all">All devices</option>
+                {deviceList.map((device) => (
+                  <option key={device.id} value={device.id}>
+                    {device.device_name ?? device.name ?? `Device ${device.id}`}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="relative flex-1 sm:w-72">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

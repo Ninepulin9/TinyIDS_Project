@@ -26,6 +26,7 @@ const BlacklistPage = () => {
   const [devices, setDevices] = useState([])
   const [unblockTarget, setUnblockTarget] = useState(null)
   const pageSize = 15
+  const [selectedDeviceId, setSelectedDeviceId] = useState('all')
   const retryRef = useRef({ timer: null, attempts: 0 })
   const lastRequestRef = useRef({ time: 0 })
   const maxRetries = 5
@@ -241,17 +242,21 @@ const BlacklistPage = () => {
   }, [loadBlacklist])
 
   const filteredEntries = useMemo(() => {
-    if (!query.trim()) return entries
+    const filteredByDevice =
+      selectedDeviceId === 'all'
+        ? entries
+        : entries.filter((entry) => String(entry.device_id ?? '') === String(selectedDeviceId))
+    if (!query.trim()) return filteredByDevice
     const needle = query.trim().toLowerCase()
-    return entries.filter((entry) => {
+    return filteredByDevice.filter((entry) => {
       const haystack = `${entry.device_name ?? ''} ${entry.ip_address ?? ''}`.toLowerCase()
       return haystack.includes(needle)
     })
-  }, [entries, query])
+  }, [entries, query, selectedDeviceId])
 
   useEffect(() => {
     setPage(1)
-  }, [query, filteredEntries.length])
+  }, [query, filteredEntries.length, selectedDeviceId])
 
   const totalPages = Math.max(1, Math.ceil(filteredEntries.length / pageSize))
   const pageSafe = Math.min(page, totalPages)
@@ -344,6 +349,18 @@ const BlacklistPage = () => {
             />
           </div>
           <div className="flex flex-wrap gap-3">
+            <select
+              value={selectedDeviceId}
+              onChange={(event) => setSelectedDeviceId(event.target.value)}
+              className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+            >
+              <option value="all">All devices</option>
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.device_name ?? device.name ?? `Device ${device.id}`}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-300 hover:text-sky-500"

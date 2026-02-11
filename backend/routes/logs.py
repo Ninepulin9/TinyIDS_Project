@@ -69,6 +69,7 @@ def _serialize_log(log: Log) -> dict:
 
     return {
         "id": log.id,
+        "device_id": log.device_id,
         "device_name": device_name,
         "timestamp": event_timestamp or _to_utc_iso(log.created_at),
         "severity": _normalize_severity(log.severity),
