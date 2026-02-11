@@ -189,6 +189,25 @@ const LogsPage = () => {
   const isMountedRef = useRef(false)
   const pollIntervalRef = useRef(null)
 
+  const dedupeDevices = useCallback((list) => {
+    const byKey = new Map()
+    list.forEach((device) => {
+      const key = device?.esp_id || device?.espId || device?.id
+      if (!key) return
+      const existing = byKey.get(key)
+      if (!existing) {
+        byKey.set(key, device)
+        return
+      }
+      const existingSeen = existing?.last_seen ? Date.parse(existing.last_seen) : 0
+      const nextSeen = device?.last_seen ? Date.parse(device.last_seen) : 0
+      if (nextSeen >= existingSeen) {
+        byKey.set(key, device)
+      }
+    })
+    return Array.from(byKey.values())
+  }, [])
+
   const fetchBlacklist = useCallback(async () => {
     try {
       const { data } = await api.get('/api/blacklist')
@@ -249,7 +268,8 @@ const LogsPage = () => {
     try {
       const { data } = await api.get('/api/devices')
       if (!isMountedRef.current) return
-      const list = Array.isArray(data) ? data : []
+      const rawList = Array.isArray(data) ? data : []
+      const list = dedupeDevices(rawList)
       setDeviceList(list)
       const tokenDevices = list.filter((device) => device?.token)
       const ids = new Set(tokenDevices.map((device) => device.id))
@@ -267,7 +287,7 @@ const LogsPage = () => {
       if (!isMountedRef.current) return
       setDevicesLoaded(true)
     }
-  }, [])
+  }, [dedupeDevices])
 
   useEffect(() => {
     isMountedRef.current = true

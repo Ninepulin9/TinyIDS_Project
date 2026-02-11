@@ -33,6 +33,25 @@ const BlacklistPage = () => {
   const retryDelayMs = 2000
   const requestThrottleMs = 5000
 
+  const dedupeDevices = (list) => {
+    const byKey = new Map()
+    list.forEach((device) => {
+      const key = device?.esp_id || device?.espId || device?.id
+      if (!key) return
+      const existing = byKey.get(key)
+      if (!existing) {
+        byKey.set(key, device)
+        return
+      }
+      const existingSeen = existing?.last_seen ? Date.parse(existing.last_seen) : 0
+      const nextSeen = device?.last_seen ? Date.parse(device.last_seen) : 0
+      if (nextSeen >= existingSeen) {
+        byKey.set(key, device)
+      }
+    })
+    return Array.from(byKey.values())
+  }
+
   const normalizeBlockedList = (value) => {
     if (Array.isArray(value)) {
       return value.map((item) => String(item).trim()).filter(Boolean)
@@ -76,7 +95,8 @@ const BlacklistPage = () => {
       }
       let keepLoading = false
       const devicesResponse = await api.get('/api/devices')
-      const deviceList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
+      const rawList = Array.isArray(devicesResponse.data) ? devicesResponse.data : []
+      const deviceList = dedupeDevices(rawList)
       const tokenDevices = deviceList.filter((device) => device?.token)
       setDevices(deviceList)
 

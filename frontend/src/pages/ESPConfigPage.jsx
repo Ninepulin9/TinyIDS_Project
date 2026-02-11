@@ -24,13 +24,32 @@ const ESPConfigPage = () => {
   const [renameValue, setRenameValue] = useState('')
   const pingIntervalRef = useRef(null)
 
+  const dedupeDevices = (list) => {
+    const byKey = new Map()
+    list.forEach((device) => {
+      const key = device?.esp_id || device?.espId || device?.id
+      if (!key) return
+      const existing = byKey.get(key)
+      if (!existing) {
+        byKey.set(key, device)
+        return
+      }
+      const existingSeen = existing?.last_seen ? Date.parse(existing.last_seen) : 0
+      const nextSeen = device?.last_seen ? Date.parse(device.last_seen) : 0
+      if (nextSeen >= existingSeen) {
+        byKey.set(key, device)
+      }
+    })
+    return Array.from(byKey.values())
+  }
+
   const fetchDevices = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const { data } = await api.get('/api/devices')
       const fetchedDevices = Array.isArray(data) ? data : []
-      setDevices(fetchedDevices)
+      setDevices(dedupeDevices(fetchedDevices))
     } catch (err) {
       const message =
         err?.response?.data?.message ??
