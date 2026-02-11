@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { Activity, AlertTriangle, BarChart3, Boxes, CircuitBoard, PackageSearch, Shield } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart3, Boxes, CircuitBoard, Shield } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { useDashboardData, DASHBOARD_TIMEFRAMES } from '../hooks/useDashboardData'
 import api from '../lib/api'
@@ -15,14 +15,6 @@ const metricCards = [
     accent: 'text-sky-600 bg-sky-50',
     description: 'Total intrusion events received in the last 24 hours.',
     settingKey: 'total_detected_attacks',
-  },
-  {
-    title: 'High Severity (Last 24h)',
-    key: 'alertsTriggered',
-    icon: AlertTriangle,
-    accent: 'text-rose-600 bg-rose-50',
-    description: 'Critical alerts that need immediate attention.',
-    settingKey: 'alerts_triggered',
   },
   {
     title: 'Unique Source IPs (24h)',
@@ -41,21 +33,13 @@ const metricCards = [
     settingKey: 'packets_captured',
   },
   {
-    title: 'Devices Online (%)',
+    title: 'Devices Online',
     key: 'deviceActivity',
     icon: Activity,
     accent: 'text-teal-600 bg-teal-50',
-    description: 'Percentage of ESP32 sensors online right now.',
+    description: 'Online sensors out of total registered devices.',
     settingKey: 'device_activity_pct',
-    isPercentage: true,
-  },
-  {
-    title: 'Total Alerts (All time)',
-    key: 'packetsAnalyzed',
-    icon: PackageSearch,
-    accent: 'text-indigo-600 bg-indigo-50',
-    description: 'All intrusion events stored in the system.',
-    settingKey: 'total_packets_analyzed',
+    isPercentage: false,
   },
 ]
 
@@ -186,16 +170,12 @@ const Dashboard = () => {
   const totalDevices = metrics.deviceCount ?? Math.max(aggregatedOnline, devicesWithToken.length)
   const nodesOnline = selectedDevice ? (selectedDevice.active ? 1 : 0) : aggregatedOnline
   const nodesDisplay = selectedDevice ? (selectedDevice.active ? 'Online' : 'Offline') : `${nodesOnline}/${totalDevices}`
-  const alertsTriggered = metrics.totals?.alertsTriggered ?? 0
+  const deviceOnlineDisplay = selectedDevice ? `${nodesOnline}/1` : `${nodesOnline}/${totalDevices}`
   const alertsLast24h = metrics.totals?.detectedAttacks ?? 0
-  const uniqueSources24h = metrics.totals?.detectionAccuracy ?? 0
-  const blockedIps = metrics.totals?.packetsCaptured ?? 0
-  const totalAlerts = metrics.totals?.packetsAnalyzed ?? 0
   const lastAlertAt = metrics.totals?.lastAlertAt
   const lastAlertLabel = lastAlertAt ? new Date(lastAlertAt).toLocaleString() : '--'
   const showTrendChart = widgetVisibility.detection_trend_pct !== false
   const showSensorCard = widgetVisibility.sensor_health_card !== false
-  const showDataPipeline = widgetVisibility.data_pipeline_card !== false
 
   const handleDownloadReport = () => {
     const pdf = new jsPDF()
@@ -221,7 +201,8 @@ const Dashboard = () => {
 
     const metricRows = visibleMetricCards.map(({ title, key, description, isPercentage }) => {
       const rawValue = metrics.totals?.[key] ?? metrics.widgets?.[key]
-      const displayValue = formatMetricValue(rawValue, isPercentage)
+      const displayValue =
+        key === 'deviceActivity' ? deviceOnlineDisplay : formatMetricValue(rawValue, isPercentage)
       return [title, displayValue, description]
     })
 
@@ -316,7 +297,8 @@ const Dashboard = () => {
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {visibleMetricCards.map(({ title, key, icon: Icon, accent, description, isPercentage }) => {
             const rawValue = metrics.totals?.[key] ?? metrics.widgets?.[key]
-            const displayValue = formatMetricValue(rawValue, isPercentage)
+            const displayValue =
+              key === 'deviceActivity' ? deviceOnlineDisplay : formatMetricValue(rawValue, isPercentage)
 
             return (
               <div key={key} className="rounded-2xl bg-white p-5 shadow-sm">
@@ -383,8 +365,8 @@ const Dashboard = () => {
           </section>
         )}
 
-        {(showSensorCard || showDataPipeline) && (
-          <section className={`mt-8 grid gap-6 ${showSensorCard && showDataPipeline ? 'md:grid-cols-2' : ''}`}>
+        {showSensorCard && (
+          <section className="mt-8 grid gap-6">
             {showSensorCard && (
               <div className="rounded-2xl bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-3">
@@ -421,39 +403,6 @@ const Dashboard = () => {
               </div>
             )}
 
-            {showDataPipeline && (
-              <div className="rounded-2xl bg-white p-6 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <Activity className="h-10 w-10 text-slate-400" />
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Attack Insights</p>
-                    <p className="text-lg font-semibold">Live threat breakdown</p>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">High Severity (24h)</p>
-                    <p className="text-xl font-semibold text-rose-600">{formatNumber(alertsTriggered)}</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Unique Source IPs (24h)</p>
-                    <p className="text-xl font-semibold text-amber-600">{formatNumber(uniqueSources24h)}</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Alerts (24h)</p>
-                    <p className="text-xl font-semibold text-slate-900">{formatNumber(alertsLast24h)}</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Blocked IPs</p>
-                    <p className="text-xl font-semibold text-emerald-600">{formatNumber(blockedIps)}</p>
-                  </div>
-                  <div className="rounded-xl border border-slate-100 px-4 py-3">
-                    <p className="text-slate-500">Total Alerts (All time)</p>
-                    <p className="text-xl font-semibold text-slate-900">{formatNumber(totalAlerts)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
           </section>
         )}
 

@@ -187,11 +187,13 @@ const LogsPage = () => {
     }
   })
   const [blockedByDevice, setBlockedByDevice] = useState(new Map())
+  const [blockStatusLoading, setBlockStatusLoading] = useState(false)
   const [page, setPage] = useState(1)
   const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
   const isMountedRef = useRef(false)
   const pollIntervalRef = useRef(null)
+  const settingsRequestRef = useRef({ time: 0 })
 
   const dedupeDevices = useCallback((list) => {
     const byKey = new Map()
@@ -263,6 +265,43 @@ const LogsPage = () => {
       }
     },
     [deviceList],
+  )
+
+  const requestSettingsForDevices = useCallback(
+    async (list = deviceList) => {
+      if (!list.length) return
+      const now = Date.now()
+      if (now - settingsRequestRef.current.time < 5000) return
+      settingsRequestRef.current.time = now
+      await Promise.allSettled(
+        list.map((device) =>
+          device?.token
+            ? api.post(`/api/devices/${device.id}/publish`, {
+                topic_base: 'esp/setting/Control',
+                message: `showsetting-${device.token}`,
+                append_token: false,
+              })
+            : Promise.resolve(),
+        ),
+      )
+    },
+    [deviceList],
+  )
+
+  const refreshBlockedStatus = useCallback(
+    async (list = deviceList) => {
+      if (!list.length) return
+      setBlockStatusLoading(true)
+      await requestSettingsForDevices(list)
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await loadBlockedFromSettings(list)
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await loadBlockedFromSettings(list)
+      if (isMountedRef.current) {
+        setBlockStatusLoading(false)
+      }
+    },
+    [deviceList, loadBlockedFromSettings, requestSettingsForDevices],
   )
 
   const fetchLatest = useCallback(
@@ -365,6 +404,7 @@ const LogsPage = () => {
             next.set(String(deviceId), new Set(ips))
             return next
           })
+          setBlockStatusLoading(false)
         }
       }
     }
@@ -379,20 +419,20 @@ const LogsPage = () => {
 
   useEffect(() => {
     if (!deviceList.length) return
-    loadBlockedFromSettings(deviceList)
-  }, [deviceList, loadBlockedFromSettings])
+    refreshBlockedStatus(deviceList).catch(() => {})
+  }, [deviceList, refreshBlockedStatus])
 
-  const blockedIpSet = useMemo(() => {
-    if (!blockedByDevice.size) return new Set()
-    if (selectedDeviceId !== 'all') {
-      return blockedByDevice.get(String(selectedDeviceId)) ?? new Set()
-    }
-    const combined = new Set()
-    blockedByDevice.forEach((set) => {
-      set.forEach((ip) => combined.add(ip))
-    })
-    return combined
-  }, [blockedByDevice, selectedDeviceId])
+  const resolveBlockedSet = useCallback(
+    (logDeviceId) => {
+      if (!blockedByDevice.size) return null
+      if (selectedDeviceId !== 'all') {
+        return blockedByDevice.get(String(selectedDeviceId)) ?? null
+      }
+      if (logDeviceId == null) return null
+      return blockedByDevice.get(String(logDeviceId)) ?? null
+    },
+    [blockedByDevice, selectedDeviceId],
+  )
 
   const timeFilteredLogs = useMemo(() => {
     const windowDays = Number(timeframeDays) || 30
@@ -663,10 +703,12 @@ const LogsPage = () => {
               ) : (
                 pagedLogs.map((log) => {
                   const ipKey = String(log.source_ip ?? '').trim().toLowerCase()
-                  const isBlocked = ipKey && blockedIpSet.has(ipKey)
+                  const deviceBlockedSet = resolveBlockedSet(log.device_id)
+                  const isBlocked = ipKey && deviceBlockedSet ? deviceBlockedSet.has(ipKey) : false
                   const statusClass = isBlocked
                     ? statusStyles.blocked
                     : statusStyles.allowed ?? 'bg-slate-100 text-slate-600 ring-slate-200'
+                  const showLoadingStatus = blockStatusLoading && !deviceBlockedSet
                   const typeLabel = String(log.type ?? '')
                   const isSettings = typeLabel.trim().toLowerCase() === 'esp settings'
                   const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
@@ -698,7 +740,7 @@ const LogsPage = () => {
                             isBlocked ? 'bg-rose-100 text-rose-700 ring-rose-200' : 'bg-slate-100 text-slate-600 ring-slate-200'
                           }`}
                         >
-                          {isBlocked ? 'Blocked' : 'Not Blocked'}
+                          {showLoadingStatus ? 'Loading...' : isBlocked ? 'Blocked' : 'Not Blocked'}
                         </span>
                       </td>
                     </tr>

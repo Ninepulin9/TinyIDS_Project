@@ -169,8 +169,9 @@ def dashboard_overview():
         .all()
     )
 
-    total_devices = len(devices)
-    active_devices = sum(1 for device in devices if device.is_active)
+    registered_devices = [device for device in devices if device.token]
+    total_devices = len(registered_devices)
+    active_devices = sum(1 for device in registered_devices if device.is_active)
 
     selected_device = None
     if device_id:

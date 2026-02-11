@@ -8,6 +8,8 @@ const statusVariant = (status) => {
 }
 
 const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, onReregister, onRename, toggling = false }) => {
+  const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
+  const isOnline = lastSeen ? dayjs().diff(lastSeen, 'minute') <= 30 : false
   const handleToggle = () => {
     onToggleActive?.(device)
   }
@@ -34,6 +36,12 @@ const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, o
         {device.last_seen && (
           <p className="mt-1 text-xs text-slate-400">Last seen {dayjs(device.last_seen).format('MMM D, YYYY HH:mm')}</p>
         )}
+      </td>
+      <td className="px-4 py-4 align-middle">
+        <Badge variant={isOnline ? 'success' : 'muted'}>
+          {isOnline ? 'Online' : 'Offline'}
+        </Badge>
+        <p className="mt-1 text-xs text-slate-400">Alive check within 30 min</p>
       </td>
       <td className="px-4 py-4 align-middle text-sm text-slate-600">
         <div className="font-medium text-slate-700">{device.ip_address ?? '--'}</div>

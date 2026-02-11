@@ -51,6 +51,7 @@ const DeviceTable = ({
             <tr>
               <th className="px-4 py-3">Device Name</th>
               <th className="px-4 py-3">Device Status</th>
+              <th className="px-4 py-3">Online Status</th>
               <th className="px-4 py-3">IP Address</th>
               <th className="px-4 py-3 hidden">Wi-Fi</th>
               <th className="px-4 py-3 hidden">MQTT</th>
@@ -67,6 +68,9 @@ const DeviceTable = ({
                   </td>
                   <td className="px-4 py-4">
                     <div className="h-5 w-20 rounded-full bg-slate-200" />
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="h-4 w-24 rounded bg-slate-200" />
                   </td>
                   <td className="px-4 py-4">
                     <div className="h-4 w-28 rounded bg-slate-200" />
@@ -88,7 +92,7 @@ const DeviceTable = ({
 
             {!loading && error && (
               <tr>
-                <td colSpan="7" className="px-4 py-6 text-center text-sm text-rose-500">
+                <td colSpan="8" className="px-4 py-6 text-center text-sm text-rose-500">
                   <div className="flex flex-col items-center gap-3">
                     <p>{error}</p>
                     <Button variant="outline" size="sm" onClick={onRetry}>
@@ -101,7 +105,7 @@ const DeviceTable = ({
 
             {!loading && !error && devices.length === 0 && (
               <tr>
-                <td colSpan="7" className="px-4 py-8 text-center text-sm text-slate-500">
+                <td colSpan="8" className="px-4 py-8 text-center text-sm text-slate-500">
                   No devices match your filters. Try adjusting your search or add a new device.
                 </td>
               </tr>

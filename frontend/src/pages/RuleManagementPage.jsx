@@ -505,19 +505,6 @@ const RuleManagementPage = () => {
     return parsed.getTime() >= requestedAt - 1000
   }
 
-  const renderStatus = (device) => {
-    const online = device?.active === true || (device.status ?? '').toLowerCase() === 'online'
-    return (
-      <span
-        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-          online ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'
-        }`}
-      >
-        {online ? 'Connected' : 'Offline'}
-      </span>
-    )
-  }
-
   const deviceRows = useMemo(() => devices, [devices])
 
   const toggleSection = (id) => {
@@ -576,7 +563,6 @@ const RuleManagementPage = () => {
               <thead>
                 <tr className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-3">Device Name</th>
-                  <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">IP Address</th>
                   <th className="px-4 py-3 text-right">Setting</th>
                 </tr>
@@ -587,7 +573,6 @@ const RuleManagementPage = () => {
                     <td className="px-4 py-3 font-medium text-slate-900">
                       {device.device_name ?? device.name ?? `Device ${device.id}`}
                     </td>
-                    <td className="px-4 py-3">{renderStatus(device)}</td>
                     <td className="px-4 py-3 text-slate-600">{device.ip_address ?? '--'}</td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -603,7 +588,7 @@ const RuleManagementPage = () => {
                 ))}
                 {!deviceRows.length && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">
+                    <td colSpan={3} className="px-4 py-10 text-center text-sm text-slate-500">
                       No devices available for configuration.
                     </td>
                   </tr>
