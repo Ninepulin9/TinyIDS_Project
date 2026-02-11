@@ -102,6 +102,7 @@ class SystemSettings(db.Model, TimestampMixin):
     log_retention_days = db.Column(db.Integer, default=30)
     attack_notifications = db.Column(db.Boolean, default=True)
     cooldown_seconds = db.Column(db.Integer, default=60)
+    auto_block_enabled = db.Column(db.Boolean, default=True)
 
 
 class DeviceNetworkProfile(db.Model, TimestampMixin):

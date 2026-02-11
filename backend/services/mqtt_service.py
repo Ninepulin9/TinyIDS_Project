@@ -168,7 +168,7 @@ class MQTTService:
             source_ip=source_ip,
             destination_ip=self._derive_ip(payload, "destination"),
         )
-        if source_ip:
+        if source_ip and self._auto_block_allowed(device.user_id):
             self._auto_block_ip(device.user_id, source_ip, enriched)
             self._queue_block_for_device(device, source_ip)
         if event_time:
@@ -608,6 +608,12 @@ class MQTTService:
         reason = payload.get("alert_msg") or payload.get("type") or "Auto-blocked from alert"
         db.session.add(Blacklist(user_id=user_id, ip_address=ip_value, reason=str(reason)))
         return
+
+    def _auto_block_allowed(self, user_id: int) -> bool:
+        settings = SystemSettings.query.filter_by(user_id=user_id).first()
+        if not settings:
+            return True
+        return bool(getattr(settings, "auto_block_enabled", True))
 
     def _sync_blocked_ip_to_device(self, device: Device, ip_address: str) -> None:
         if not self.client:

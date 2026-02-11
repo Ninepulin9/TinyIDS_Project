@@ -120,11 +120,12 @@ def system_settings():
                 "log_retention_days": settings.log_retention_days,
                 "attack_notifications": settings.attack_notifications,
                 "cooldown_seconds": settings.cooldown_seconds,
+                "auto_block_enabled": settings.auto_block_enabled,
             }
         )
 
     payload = request.get_json(force=True)
-    for attr in ["log_retention_days", "attack_notifications", "cooldown_seconds"]:
+    for attr in ["log_retention_days", "attack_notifications", "cooldown_seconds", "auto_block_enabled"]:
         if attr in payload:
             setattr(settings, attr, payload[attr])
     db.session.commit()

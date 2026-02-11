@@ -30,6 +30,7 @@ const Settings = () => {
   const [systemSettings, setSystemSettings] = useState({
     log_retention_days: 30,
     attack_notifications: true,
+    auto_block_enabled: true,
   })
   const [dashboardSettings, setDashboardSettings] = useState({
     timeframe_minutes: 60,
@@ -38,6 +39,7 @@ const Settings = () => {
   const [systemSaving, setSystemSaving] = useState(false)
   const [dashboardSaving, setDashboardSaving] = useState(false)
   const attackNotificationsEnabled = Boolean(systemSettings.attack_notifications)
+  const autoBlockEnabled = Boolean(systemSettings.auto_block_enabled)
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -157,6 +159,27 @@ const Settings = () => {
                 }
                 disabled={systemSaving}
                 label="Enable Attack Notifications"
+              />
+            </div>
+          </div>
+          <div className="md:col-span-2 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex flex-col text-slate-700">
+              <span className="text-sm font-semibold">Enable Auto Block</span>
+              <span className="text-xs text-slate-500">
+                Automatically block alert IPs and push them to ESP settings.
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-xs font-semibold ${autoBlockEnabled ? 'text-indigo-600' : 'text-slate-400'}`}>
+                {autoBlockEnabled ? 'On' : 'Off'}
+              </span>
+              <Switch
+                checked={autoBlockEnabled}
+                onChange={(nextValue) =>
+                  setSystemSettings((prev) => ({ ...prev, auto_block_enabled: nextValue }))
+                }
+                disabled={systemSaving}
+                label="Enable Auto Block"
               />
             </div>
           </div>
