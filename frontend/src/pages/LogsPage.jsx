@@ -179,6 +179,7 @@ const LogsPage = () => {
   const [query, setQuery] = useState('')
   const [timeframeDays, setTimeframeDays] = useState(30)
   const [blacklistSet, setBlacklistSet] = useState(new Set())
+  const [autoBlockEnabled, setAutoBlockEnabled] = useState(true)
   const [page, setPage] = useState(1)
   const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
@@ -200,6 +201,15 @@ const LogsPage = () => {
       }
     } catch {
       // silent; fallback to existing set
+    }
+  }, [])
+
+  const fetchSystemSettings = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/settings/system')
+      setAutoBlockEnabled(Boolean(data?.auto_block_enabled))
+    } catch {
+      setAutoBlockEnabled(true)
     }
   }, [])
 
@@ -257,6 +267,7 @@ const LogsPage = () => {
     isMountedRef.current = true
     fetchLatest({ silent: false })
     fetchBlacklist()
+    fetchSystemSettings()
     fetchDevices()
     pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 4000)
     return () => {
@@ -521,7 +532,7 @@ const LogsPage = () => {
               ) : (
                 pagedLogs.map((log) => {
                   const ipKey = String(log.source_ip ?? '').trim().toLowerCase()
-                  const isBlocked = ipKey && blacklistSet.has(ipKey)
+                  const isBlocked = autoBlockEnabled && ipKey && blacklistSet.has(ipKey)
                   const statusClass = isBlocked
                     ? statusStyles.blocked
                     : statusStyles.allowed ?? 'bg-slate-100 text-slate-600 ring-slate-200'

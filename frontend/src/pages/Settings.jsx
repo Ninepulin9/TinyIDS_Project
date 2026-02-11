@@ -164,7 +164,7 @@ const Settings = () => {
           </div>
           <div className="md:col-span-2 flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
             <div className="flex flex-col text-slate-700">
-              <span className="text-sm font-semibold">Enable Auto Block</span>
+              <span className="text-sm font-semibold">Enable Auto Block IP</span>
               <span className="text-xs text-slate-500">
                 Automatically block alert IPs and push them to ESP settings.
               </span>
@@ -179,7 +179,7 @@ const Settings = () => {
                   setSystemSettings((prev) => ({ ...prev, auto_block_enabled: nextValue }))
                 }
                 disabled={systemSaving}
-                label="Enable Auto Block"
+                label="Enable Auto Block IP"
               />
             </div>
           </div>
