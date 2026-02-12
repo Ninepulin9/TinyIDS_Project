@@ -18,6 +18,7 @@ const DeviceTable = ({
   onReregister,
   onRename,
   togglingId,
+  aliveCheckAt,
   showHeader = true,
   withContainer = true,
 }) => {
@@ -117,6 +118,7 @@ const DeviceTable = ({
                 <DeviceRow
                   key={device.id}
                   device={device}
+                  aliveCheckAt={aliveCheckAt}
                   onEditWifi={onEditWifi}
                   onEditMqtt={onEditMqtt}
                   onToggleActive={onToggleActive}

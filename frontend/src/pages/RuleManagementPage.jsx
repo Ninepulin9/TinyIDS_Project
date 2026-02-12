@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dayjs from 'dayjs'
 import { Loader2, Settings } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import api from '../api/axios'
 import { getSocket } from '../lib/socket'
+import Badge from '../components/ui/Badge.jsx'
 
 const defaultRuleState = {
   token: '',
@@ -158,9 +160,12 @@ const RuleManagementPage = () => {
   const [saving, setSaving] = useState(false)
   const [loadingRules, setLoadingRules] = useState(false)
   const [awaitingToken, setAwaitingToken] = useState('')
+  const [aliveCheckAt, setAliveCheckAt] = useState(null)
   const pollRef = useRef({ timer: null, attempts: 0 })
   const requestMetaRef = useRef({ token: '', requestedAt: 0 })
   const lastSettingsRequestRef = useRef({ token: '', time: 0 })
+  const pingIntervalRef = useRef(null)
+  const initialPingRef = useRef(false)
   const requestThrottleMs = 5000
   const [expanded, setExpanded] = useState(() =>
     ruleSections.reduce((acc, section, idx) => ({ ...acc, [section.id]: idx === 0 }), {})
@@ -207,6 +212,53 @@ const RuleManagementPage = () => {
       socket.off('device:updated', handleDeviceUpdated)
     }
   }, [loadDevices])
+
+  const pingDevices = useCallback(async () => {
+    const liveDevices = devices.filter((d) => d?.id && d.token)
+    if (!liveDevices.length) return
+    setAliveCheckAt(Date.now())
+    try {
+      await Promise.all(
+        liveDevices.map((device) =>
+          api.post(`/api/devices/${device.id}/publish`, {
+            topic_base: 'esp/Alive/Check',
+            message: `Test-${device.token}`,
+            append_token: false,
+          }),
+        ),
+      )
+    } catch (err) {
+      console.warn('Ping devices failed', err)
+    }
+  }, [devices])
+
+  useEffect(() => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current)
+      pingIntervalRef.current = null
+    }
+    const liveDevices = devices.filter((d) => d?.id && d.token)
+    if (!liveDevices.length) return undefined
+    pingIntervalRef.current = setInterval(() => {
+      pingDevices()
+      loadDevices()
+    }, 20000)
+    return () => {
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current)
+        pingIntervalRef.current = null
+      }
+    }
+  }, [devices, pingDevices, loadDevices])
+
+  useEffect(() => {
+    if (initialPingRef.current) return
+    const liveDevices = devices.filter((d) => d?.id && d.token)
+    if (!liveDevices.length) return
+    initialPingRef.current = true
+    setAliveCheckAt(Date.now())
+    pingDevices()
+  }, [devices, pingDevices])
 
   const openDrawer = (device) => {
     setSelectedDevice(device)
@@ -507,6 +559,38 @@ const RuleManagementPage = () => {
 
   const deviceRows = useMemo(() => devices, [devices])
 
+  const renderOnlineStatus = (device) => {
+    const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
+    const pendingWindowSec = 30
+    const requestMoment = aliveCheckAt ? dayjs(aliveCheckAt) : null
+    const awaitingAlive =
+      Boolean(device?.token) &&
+      requestMoment &&
+      (!lastSeen || lastSeen.isBefore(requestMoment)) &&
+      dayjs().diff(requestMoment, 'second') <= pendingWindowSec
+    const isOnline = lastSeen ? dayjs().diff(lastSeen, 'minute') <= 30 : false
+
+    return (
+      <div className="flex flex-col">
+        <Badge variant={awaitingAlive ? 'muted' : isOnline ? 'success' : 'muted'}>
+          {awaitingAlive ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400" />
+              Checking...
+            </span>
+          ) : isOnline ? (
+            'Online'
+          ) : (
+            'Offline'
+          )}
+        </Badge>
+        <span className="mt-1 text-xs text-slate-400">
+          {awaitingAlive ? 'Waiting for alive response' : 'Alive check within 30 min'}
+        </span>
+      </div>
+    )
+  }
+
   const toggleSection = (id) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
   }
@@ -563,6 +647,7 @@ const RuleManagementPage = () => {
               <thead>
                 <tr className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-3">Device Name</th>
+                  <th className="px-4 py-3">Online Status</th>
                   <th className="px-4 py-3">IP Address</th>
                   <th className="px-4 py-3 text-right">Setting</th>
                 </tr>
@@ -573,6 +658,7 @@ const RuleManagementPage = () => {
                     <td className="px-4 py-3 font-medium text-slate-900">
                       {device.device_name ?? device.name ?? `Device ${device.id}`}
                     </td>
+                    <td className="px-4 py-3">{renderOnlineStatus(device)}</td>
                     <td className="px-4 py-3 text-slate-600">{device.ip_address ?? '--'}</td>
                     <td className="px-4 py-3 text-right">
                       <button
@@ -588,7 +674,7 @@ const RuleManagementPage = () => {
                 ))}
                 {!deviceRows.length && (
                   <tr>
-                    <td colSpan={3} className="px-4 py-10 text-center text-sm text-slate-500">
+                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">
                       No devices available for configuration.
                     </td>
                   </tr>

@@ -7,9 +7,15 @@ const statusVariant = (status) => {
   return status.toLowerCase() === 'connected' || status.toLowerCase() === 'online' ? 'success' : 'danger'
 }
 
-const DeviceRow = ({ device, onEditWifi, onEditMqtt, onToggleActive, onDelete, onReregister, onRename, toggling = false }) => {
+const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActive, onDelete, onReregister, onRename, toggling = false }) => {
   const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
-  const awaitingAlive = Boolean(device?.token) && !lastSeen
+  const pendingWindowSec = 30
+  const requestMoment = aliveCheckAt ? dayjs(aliveCheckAt) : null
+  const awaitingAlive =
+    Boolean(device?.token) &&
+    requestMoment &&
+    (!lastSeen || lastSeen.isBefore(requestMoment)) &&
+    dayjs().diff(requestMoment, 'second') <= pendingWindowSec
   const isOnline = lastSeen ? dayjs().diff(lastSeen, 'minute') <= 30 : false
   const handleToggle = () => {
     onToggleActive?.(device)

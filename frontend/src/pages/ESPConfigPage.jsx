@@ -22,6 +22,7 @@ const ESPConfigPage = () => {
   const [reregisterTarget, setReregisterTarget] = useState(null)
   const [renameTarget, setRenameTarget] = useState(null)
   const [renameValue, setRenameValue] = useState('')
+  const [aliveCheckAt, setAliveCheckAt] = useState(null)
   const pingIntervalRef = useRef(null)
   const initialPingRef = useRef(false)
 
@@ -98,6 +99,7 @@ const ESPConfigPage = () => {
   const pingDevices = useCallback(async () => {
     const liveDevices = devices.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return
+    setAliveCheckAt(Date.now())
     try {
       await Promise.all(
         liveDevices.map((device) =>
@@ -137,6 +139,7 @@ const ESPConfigPage = () => {
     const liveDevices = devices.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return
     initialPingRef.current = true
+    setAliveCheckAt(Date.now())
     pingDevices()
   }, [devices, pingDevices])
 
@@ -341,6 +344,7 @@ const ESPConfigPage = () => {
           onReregister={handleReregisterDevice}
           onRename={handleRenameDevice}
           togglingId={togglingId}
+          aliveCheckAt={aliveCheckAt}
           withContainer={false}
         />
       </section>
