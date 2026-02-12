@@ -320,15 +320,13 @@ const Dashboard = () => {
           })}
         </section>
 
-        {showTrendChart && (
-          <section
-            className="mt-8 grid gap-6 lg:grid-cols-1"
-          >
+        {(showTrendChart || showSensorCard) && (
+          <section className="mt-8 grid gap-6 lg:grid-cols-2">
             {showTrendChart && (
               <div className="rounded-2xl bg-white p-6 shadow-sm">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-slate-500">Alert Trend</p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Detected Attacks</p>
                     <p className="text-lg font-semibold text-slate-900">
                       Alerts observed in the last {windowDays} days
                     </p>
@@ -367,47 +365,42 @@ const Dashboard = () => {
                 </div>
               </div>
             )}
-          </section>
-        )}
 
-        {showSensorCard && (
-          <section className="mt-8 grid gap-6">
             {showSensorCard && (
               <div className="rounded-2xl bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-3">
                   <CircuitBoard className="h-10 w-10 text-slate-400" />
                   <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">System Health</p>
-                  <p className="text-lg font-semibold">ESP32 Fleet Status</p>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">System Health</p>
+                    <p className="text-lg font-semibold">ESP32 Fleet Status</p>
+                  </div>
                 </div>
-              </div>
-              <ul className="mt-4 space-y-3 text-sm">
-                <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                  <span className="text-slate-500">{selectedDevice ? 'Device Status' : 'ESP32 Nodes Online'}</span>
-                  <span className="font-semibold text-slate-900">{nodesDisplay}</span>
-                </li>
-                <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                  <span className="text-slate-500">Threat Level (24h)</span>
-                  <span className="font-semibold text-slate-900">{metrics.totals?.threatLevel ?? 0}%</span>
-                </li>
-                <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                  <span className="text-slate-500">Alerts (24h)</span>
-                  <span className="font-semibold text-slate-900">{alertsLast24h}</span>
-                </li>
-                <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                  <span className="text-slate-500">Last Alert Seen</span>
-                  <span className="font-semibold text-slate-900">{lastAlertLabel}</span>
-                </li>
-                {selectedDevice && (
+                <ul className="mt-4 space-y-3 text-sm">
                   <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
-                    <span className="text-slate-500">Device MAC</span>
-                    <span className="font-semibold text-slate-900">{contextMac}</span>
+                    <span className="text-slate-500">{selectedDevice ? 'Device Status' : 'ESP32 Nodes Online'}</span>
+                    <span className="font-semibold text-slate-900">{nodesDisplay}</span>
                   </li>
-                )}
-              </ul>
+                  <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                    <span className="text-slate-500">Threat Level (24h)</span>
+                    <span className="font-semibold text-slate-900">{metrics.totals?.threatLevel ?? 0}%</span>
+                  </li>
+                  <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                    <span className="text-slate-500">Alerts (24h)</span>
+                    <span className="font-semibold text-slate-900">{alertsLast24h}</span>
+                  </li>
+                  <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                    <span className="text-slate-500">Last Alert Seen</span>
+                    <span className="font-semibold text-slate-900">{lastAlertLabel}</span>
+                  </li>
+                  {selectedDevice && (
+                    <li className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2">
+                      <span className="text-slate-500">Device MAC</span>
+                      <span className="font-semibold text-slate-900">{contextMac}</span>
+                    </li>
+                  )}
+                </ul>
               </div>
             )}
-
           </section>
         )}
 
