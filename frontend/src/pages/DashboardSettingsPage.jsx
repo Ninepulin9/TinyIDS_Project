@@ -24,7 +24,7 @@ const defaultSettings = {
     total_detected_attacks: true,
     total_packets_analyzed: true,
     alerts_triggered: true,
-    detection_trend_pct: false,
+    detection_trend_pct: true,
     sensor_health_card: true,
     data_pipeline_card: true,
   },

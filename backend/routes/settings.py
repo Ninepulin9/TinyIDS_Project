@@ -41,6 +41,14 @@ def _ensure_dashboard_settings(user_id: int) -> DashboardSettings:
     else:
         # Ensure widget keys stay in sync with defaults.
         normalized = settings.to_widget_config()
+        # If user never customized settings, promote new defaults (show attack trend).
+        is_pristine = (
+            settings.created_at
+            and settings.updated_at
+            and settings.updated_at == settings.created_at
+        )
+        if is_pristine and normalized.get("detection_trend_pct") is False:
+            normalized["detection_trend_pct"] = True
         if normalized != settings.widgets_visible:
             settings.widgets_visible = normalized
             db.session.commit()

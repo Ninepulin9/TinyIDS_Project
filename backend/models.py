@@ -145,7 +145,7 @@ DEFAULT_DASHBOARD_WIDGETS = {
     "device_activity_pct": True,
     "alerts_triggered": True,
     "detection_accuracy_pct": True,
-    "detection_trend_pct": False,
+    "detection_trend_pct": True,
     "rule_activation_pct": True,
     "packets_captured": True,
     "threat_level_indicator": True,

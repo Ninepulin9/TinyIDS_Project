@@ -17,8 +17,8 @@ const widgetDescriptions = {
     description: 'Count of alert notifications generated in the selected window.',
   },
   detection_trend_pct: {
-    label: 'Detection Trend (%)',
-    description: 'Day-over-day swing in detection accuracy to monitor drift.',
+    label: 'Attack Trend (7/30 days)',
+    description: 'Line chart showing alert volume over the selected window.',
   },
   sensor_health_card: {
     label: 'Sensor Fleet Status',

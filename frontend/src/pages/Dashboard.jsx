@@ -62,7 +62,7 @@ const defaultWidgetVisibility = {
   device_activity_pct: true,
   alerts_triggered: true,
   detection_accuracy_pct: true,
-  detection_trend_pct: false,
+  detection_trend_pct: true,
   rule_activation_pct: true,
   packets_captured: true,
   threat_level_indicator: true,
