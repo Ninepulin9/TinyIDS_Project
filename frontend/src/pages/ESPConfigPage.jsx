@@ -23,6 +23,7 @@ const ESPConfigPage = () => {
   const [renameTarget, setRenameTarget] = useState(null)
   const [renameValue, setRenameValue] = useState('')
   const pingIntervalRef = useRef(null)
+  const initialPingRef = useRef(false)
 
   const dedupeDevices = (list) => {
     const byKey = new Map()
@@ -122,7 +123,7 @@ const ESPConfigPage = () => {
     pingIntervalRef.current = setInterval(() => {
       pingDevices()
       fetchDevices()
-    }, 25000)
+    }, 20000)
     return () => {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
@@ -130,6 +131,14 @@ const ESPConfigPage = () => {
       }
     }
   }, [devices, pingDevices, fetchDevices])
+
+  useEffect(() => {
+    if (initialPingRef.current) return
+    const liveDevices = devices.filter((d) => d?.id && d.token)
+    if (!liveDevices.length) return
+    initialPingRef.current = true
+    pingDevices()
+  }, [devices, pingDevices])
 
   const filteredDevices = useMemo(() => {
     const withToken = devices.filter((device) => device?.token)
