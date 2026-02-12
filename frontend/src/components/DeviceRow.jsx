@@ -13,8 +13,8 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
   const requestMoment = aliveCheckAt ? dayjs(aliveCheckAt) : null
   const awaitingAlive =
     Boolean(device?.token) &&
+    !lastSeen &&
     requestMoment &&
-    (!lastSeen || lastSeen.isBefore(requestMoment)) &&
     dayjs().diff(requestMoment, 'second') <= pendingWindowSec
   const isOnline = lastSeen ? dayjs().diff(lastSeen, 'minute') <= 30 : false
   const handleToggle = () => {

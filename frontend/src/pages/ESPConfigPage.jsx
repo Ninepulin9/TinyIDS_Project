@@ -99,7 +99,6 @@ const ESPConfigPage = () => {
   const pingDevices = useCallback(async () => {
     const liveDevices = devices.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return
-    setAliveCheckAt(Date.now())
     try {
       await Promise.all(
         liveDevices.map((device) =>
@@ -139,7 +138,8 @@ const ESPConfigPage = () => {
     const liveDevices = devices.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return
     initialPingRef.current = true
-    setAliveCheckAt(Date.now())
+    const needsCheck = liveDevices.some((device) => !device?.last_seen)
+    setAliveCheckAt(needsCheck ? Date.now() : null)
     pingDevices()
   }, [devices, pingDevices])
 

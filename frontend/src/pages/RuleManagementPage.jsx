@@ -216,7 +216,6 @@ const RuleManagementPage = () => {
   const pingDevices = useCallback(async () => {
     const liveDevices = devices.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return
-    setAliveCheckAt(Date.now())
     try {
       await Promise.all(
         liveDevices.map((device) =>
@@ -256,7 +255,8 @@ const RuleManagementPage = () => {
     const liveDevices = devices.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return
     initialPingRef.current = true
-    setAliveCheckAt(Date.now())
+    const needsCheck = liveDevices.some((device) => !device?.last_seen)
+    setAliveCheckAt(needsCheck ? Date.now() : null)
     pingDevices()
   }, [devices, pingDevices])
 
@@ -565,8 +565,8 @@ const RuleManagementPage = () => {
     const requestMoment = aliveCheckAt ? dayjs(aliveCheckAt) : null
     const awaitingAlive =
       Boolean(device?.token) &&
+      !lastSeen &&
       requestMoment &&
-      (!lastSeen || lastSeen.isBefore(requestMoment)) &&
       dayjs().diff(requestMoment, 'second') <= pendingWindowSec
     const isOnline = lastSeen ? dayjs().diff(lastSeen, 'minute') <= 30 : false
 
