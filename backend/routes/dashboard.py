@@ -56,9 +56,10 @@ def _serialize_device(device, attack_counts):
     }
 
 
-def _build_trend_data(base_query):
+def _build_trend_data(base_query, days: int):
+    days = max(1, min(int(days or 7), 90))
     today = datetime.utcnow().date()
-    window = [today - timedelta(days=idx) for idx in range(11, -1, -1)]
+    window = [today - timedelta(days=idx) for idx in range(days - 1, -1, -1)]
 
     counts = dict(
         base_query.with_entities(func.date(Log.created_at), func.count(Log.id))
@@ -68,7 +69,7 @@ def _build_trend_data(base_query):
 
     return [
         {
-            "label": day.strftime("%a"),
+            "label": day.strftime("%b %d"),
             "fullLabel": day.strftime("%b %d"),
             "value": counts.get(day, 0),
         }
@@ -153,6 +154,7 @@ def dashboard_overview():
     user_id = _resolve_user_id()
     device_id = request.args.get("device_id", type=int)
     mac_address = request.args.get("mac_address")
+    window_days = request.args.get("window_days", type=int) or 30
 
     base_query = _filtered_logs(user_id=user_id, device_id=device_id, mac_address=mac_address)
 
@@ -195,7 +197,7 @@ def dashboard_overview():
         active_devices=active_devices,
     )
     trends = {
-        "days": _build_trend_data(base_query),
+        "days": _build_trend_data(base_query, window_days),
         "minutes": [{"label": f"{idx * 5}m", "value": 0} for idx in range(12)],
         "hours": [{"label": f"{idx}h", "value": 0} for idx in range(12)],
         "seconds": [{"label": f"{idx * 5}s", "value": 0} for idx in range(12)],

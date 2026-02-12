@@ -75,8 +75,8 @@ const Dashboard = () => {
     metrics,
     loading,
     error,
-    timeframe,
-    setTimeframe,
+    windowDays,
+    setWindowDays,
     trendData,
     devices,
     selectedDeviceId,
@@ -193,7 +193,7 @@ const Dashboard = () => {
 
     pdf.setFontSize(10)
     pdf.text(`Report Issued: ${generatedAt.toLocaleString()}`, 14, 32)
-    pdf.text(`Reporting Window: ${timeframe}`, 14, 38)
+    pdf.text(`Reporting Window: Last ${windowDays} days`, 14, 38)
     pdf.text(`Device Context: ${contextDeviceName}`, 14, 44)
     pdf.text(`MAC Address: ${contextMac}`, 14, 50)
     pdf.text(`Current Threat Level: ${metrics.totals?.threatLevel ?? 0}%`, 14, 56)
@@ -214,11 +214,14 @@ const Dashboard = () => {
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
     })
 
-    const trendRows = widgetVisibility.detection_trend_pct === false ? [] : trendData.map((entry) => [entry.label, entry.value ?? 0])
+    const trendRows =
+      widgetVisibility.detection_trend_pct === false
+        ? []
+        : trendData.map((entry) => [entry.fullLabel ?? entry.label, entry.value ?? 0])
     if (trendRows.length) {
       autoTable(pdf, {
         startY: (pdf.lastAutoTable?.finalY ?? 66) + 12,
-        head: [[`Trend (${timeframe})`, 'Value']],
+        head: [[`Trend (Last ${windowDays} days)`, 'Value']],
         body: trendRows,
         styles: { textColor: [20, 24, 33] },
         headStyles: { fillColor: [14, 165, 233], textColor: 255, fontStyle: 'bold' },
@@ -326,21 +329,23 @@ const Dashboard = () => {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-slate-500">Alert Trend</p>
-                    <p className="text-lg font-semibold text-slate-900">Alerts observed in the last 12 days</p>
+                    <p className="text-lg font-semibold text-slate-900">
+                      Alerts observed in the last {windowDays} days
+                    </p>
                   </div>
                   {DASHBOARD_TIMEFRAMES.length > 1 && (
                     <div className="flex flex-wrap gap-2">
                       {DASHBOARD_TIMEFRAMES.map((frame) => (
                         <button
                           key={frame}
-                          onClick={() => setTimeframe(frame)}
+                          onClick={() => setWindowDays(frame)}
                           className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
-                            timeframe === frame
+                            windowDays === frame
                               ? 'border-sky-500 bg-sky-50 text-sky-600'
                               : 'border-slate-200 text-slate-500 hover:bg-slate-50'
                           }`}
                         >
-                          {frame}
+                          Last {frame} days
                         </button>
                       ))}
                     </div>

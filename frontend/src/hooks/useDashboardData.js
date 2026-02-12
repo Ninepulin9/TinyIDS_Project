@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import api from '../lib/api'
 
-export const DASHBOARD_TIMEFRAMES = ['days']
+export const DASHBOARD_TIMEFRAMES = [7, 30]
 const AUTO_REFRESH_INTERVAL_MS = 4 * 1000
 
 const createEmptyTrends = () => ({
@@ -106,7 +106,7 @@ const useDashboardData = () => {
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [timeframe, setTimeframe] = useState('days')
+  const [windowDays, setWindowDays] = useState(30)
   const [lastManualRefresh, setLastManualRefresh] = useState(null)
 
   const isMountedRef = useRef(false)
@@ -123,7 +123,7 @@ const useDashboardData = () => {
   const fetchMetrics = useCallback(
     async ({ silent = false, deviceId } = {}) => {
       const targetDeviceKey = deviceId ?? selectedDeviceId
-      const params = resolveDeviceQueryParams(targetDeviceKey)
+      const params = { ...resolveDeviceQueryParams(targetDeviceKey), window_days: windowDays }
 
       const requestId = requestIdRef.current + 1
       requestIdRef.current = requestId
@@ -174,7 +174,7 @@ const useDashboardData = () => {
         }
       }
     },
-    [selectedDeviceId, updateSelectedDeviceId],
+    [selectedDeviceId, updateSelectedDeviceId, windowDays],
   )
 
   useEffect(() => {
@@ -212,9 +212,9 @@ const useDashboardData = () => {
     if (!metrics?.trends) {
       return []
     }
-    const data = metrics.trends[timeframe]
+    const data = metrics.trends.days
     return Array.isArray(data) ? data : []
-  }, [metrics.trends, timeframe])
+  }, [metrics.trends])
 
   return {
     metrics,
@@ -224,8 +224,8 @@ const useDashboardData = () => {
     selectedDevice,
     loading,
     error,
-    timeframe,
-    setTimeframe,
+    windowDays,
+    setWindowDays,
     trendData,
     refresh,
     lastManualRefresh,
