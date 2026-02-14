@@ -818,13 +818,19 @@ const LogsPage = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${
-                            isBlocked ? 'bg-rose-100 text-rose-700 ring-rose-200' : 'bg-slate-100 text-slate-600 ring-slate-200'
-                          }`}
-                        >
-                          {showLoadingStatus ? 'Loading...' : isBlocked ? 'Blocked' : 'Not Blocked'}
-                        </span>
+                        {canBlock ? (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${
+                              isBlocked ? 'bg-rose-100 text-rose-700 ring-rose-200' : 'bg-slate-100 text-slate-600 ring-slate-200'
+                            }`}
+                          >
+                            {showLoadingStatus ? 'Loading...' : isBlocked ? 'Blocked' : 'Not Blocked'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                            Cant block
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {canBlock ? (
