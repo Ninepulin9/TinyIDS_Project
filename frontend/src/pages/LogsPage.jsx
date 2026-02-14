@@ -841,7 +841,9 @@ const LogsPage = () => {
                             {isSubmitting ? 'Blocking...' : isBlocked ? 'Blocked' : 'Block'}
                           </button>
                         ) : (
-                          <span className="text-xs text-slate-400">--</span>
+                          <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                            Can’t block
+                          </span>
                         )}
                       </td>
                     </tr>
