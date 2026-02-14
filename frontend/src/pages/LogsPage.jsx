@@ -167,6 +167,23 @@ const mergeLogs = (incoming, existing) => {
     .slice(0, 200)
 }
 
+const resolveDeviceName = (log, tokenNameMap) => {
+  const baseName = log?.device_name ?? 'Unknown'
+  if (baseName !== 'Unknown') return baseName
+  const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
+  const mappedName = tokenValue ? tokenNameMap.get(tokenValue) : null
+  return mappedName || baseName
+}
+
+const shouldHideUnknownLog = (log, tokenNameMap) => {
+  const name = String(resolveDeviceName(log, tokenNameMap) ?? '').trim().toLowerCase()
+  if (!name || name === 'unknown') {
+    const ip = String(log?.source_ip ?? '').trim()
+    return ip.length === 0
+  }
+  return false
+}
+
 const LogsPage = () => {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -443,12 +460,13 @@ const LogsPage = () => {
       if (!withinWindow) return false
       const typeLabel = String(log.type ?? '').trim().toLowerCase()
       if (typeLabel === 'esp settings') return false
+      if (shouldHideUnknownLog(log, tokenNameMap)) return false
       if (!devicesLoaded || (tokenDeviceIds.size === 0 && tokenValues.size === 0)) return true
       if (tokenDeviceIds.has(log.device_id)) return true
       const payloadToken = log?.payload?.token ? String(log.payload.token) : ''
       return payloadToken ? tokenValues.has(payloadToken) : false
     })
-  }, [logs, timeframeDays, devicesLoaded, tokenDeviceIds, tokenValues])
+  }, [logs, timeframeDays, devicesLoaded, tokenDeviceIds, tokenValues, tokenNameMap])
 
   const filteredLogs = useMemo(() => {
     const filteredByDevice =
@@ -711,9 +729,7 @@ const LogsPage = () => {
                   const showLoadingStatus = blockStatusLoading && !deviceBlockedSet
                   const typeLabel = String(log.type ?? '')
                   const isSettings = typeLabel.trim().toLowerCase() === 'esp settings'
-                  const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
-                  const mappedName = tokenValue ? tokenNameMap.get(tokenValue) : null
-                  const displayName = log.device_name === 'Unknown' && mappedName ? mappedName : log.device_name
+                  const displayName = resolveDeviceName(log, tokenNameMap)
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/70">
                       <td className="px-4 py-3 font-medium text-slate-700">{formatTimestamp(log.timestamp)}</td>
