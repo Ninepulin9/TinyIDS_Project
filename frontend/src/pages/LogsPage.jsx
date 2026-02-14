@@ -566,19 +566,48 @@ const LogsPage = () => {
 
   useEffect(() => {
     setPage(1)
-  }, [query, timeframeDays, timeFilteredLogs.length, selectedDeviceId])
+  }, [query, timeframeDays, timeFilteredLogs.length, selectedDeviceId, filteredLogs.length])
 
-  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize))
-  const pageSafe = Math.min(page, totalPages)
-  const pagedLogs = useMemo(() => {
+  const groupedLogs = useMemo(() => {
     const ordered = [...filteredLogs].sort((left, right) => {
       const leftTime = dayjs(left.timestamp).valueOf()
       const rightTime = dayjs(right.timestamp).valueOf()
       return sortDesc ? rightTime - leftTime : leftTime - rightTime
     })
+    const windowMs = 10 * 60 * 1000
+    const grouped = []
+    for (const log of ordered) {
+      const timestamp = dayjs(log.timestamp).valueOf()
+      const safeTime = Number.isFinite(timestamp) ? timestamp : 0
+      const key = [
+        log.device_id ?? log.device_name ?? '',
+        log.type ?? '',
+        log.alert_msg ?? '',
+        log.source_ip ?? '',
+      ]
+        .map((part) => String(part).trim().toLowerCase())
+        .join('|')
+      const last = grouped[grouped.length - 1]
+      if (last && last._groupKey === key && Math.abs(safeTime - last._groupTime) <= windowMs) {
+        last._count += 1
+        continue
+      }
+      grouped.push({
+        ...log,
+        _groupKey: key,
+        _groupTime: safeTime,
+        _count: 1,
+      })
+    }
+    return grouped
+  }, [filteredLogs, sortDesc])
+
+  const totalPages = Math.max(1, Math.ceil(groupedLogs.length / pageSize))
+  const pageSafe = Math.min(page, totalPages)
+  const pagedLogs = useMemo(() => {
     const start = (pageSafe - 1) * pageSize
-    return ordered.slice(start, start + pageSize)
-  }, [filteredLogs, pageSafe, sortDesc])
+    return groupedLogs.slice(start, start + pageSize)
+  }, [groupedLogs, pageSafe])
 
   const chartData = useMemo(() => {
     const daysWindow = Number(timeframeDays) === 7 ? 7 : 30
@@ -804,7 +833,16 @@ const LogsPage = () => {
                       <td className={`px-4 py-3 font-semibold ${isSettings ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {typeLabel || 'Unknown'}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{log.alert_msg || '--'}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <span>{log.alert_msg || '--'}</span>
+                          {log._count > 1 ? (
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-200">
+                              x{log._count}
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1 text-xs text-slate-600">
                           <span className="font-semibold text-slate-700">{log.source_ip || '--'}</span>
