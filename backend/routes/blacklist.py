@@ -1,12 +1,14 @@
 from http import HTTPStatus
+import re
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
-from models import Blacklist
+from models import Blacklist, Device, DeviceToken
+from services.mqtt_service import mqtt_service
 
 blacklist_bp = Blueprint("blacklist", __name__, url_prefix="/blacklist")
 DEFAULT_USER_ID = 1
@@ -41,6 +43,10 @@ def _serialize_entry(entry) -> dict:
     }
 
 
+def _is_valid_ip(value: str) -> bool:
+    return bool(re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", value))
+
+
 def _raw_blacklist_rows():
     rows = db.session.execute(
         text("SELECT id, ip_address, reason, created_at FROM blacklist ORDER BY created_at DESC")
@@ -62,6 +68,57 @@ def list_blacklist():
     except (OperationalError, ProgrammingError):
         entries = list(_raw_blacklist_rows())
     return jsonify([_serialize_entry(entry) for entry in entries])
+
+
+@blacklist_bp.route("", methods=["POST"])
+@jwt_required(optional=True)
+def add_blacklist_entry():
+    user_id = _resolve_user_id()
+    payload = request.get_json(force=True) or {}
+    ip_address = (payload.get("ip_address") or payload.get("ip") or "").strip()
+    if not ip_address or not _is_valid_ip(ip_address):
+        return jsonify({"message": "Valid ip_address is required"}), HTTPStatus.BAD_REQUEST
+
+    reason = (payload.get("reason") or payload.get("alert_msg") or payload.get("type") or "").strip() or None
+    device_id = payload.get("device_id")
+    token_value = (payload.get("token") or "").strip()
+
+    device = None
+    if device_id is not None:
+        try:
+            device_id = int(device_id)
+        except (TypeError, ValueError):
+            device_id = None
+    if device_id is not None:
+        device = Device.query.filter(Device.id == device_id, Device.user_id == user_id).first()
+
+    if not device and token_value:
+        token_row = DeviceToken.query.filter_by(token=token_value).first()
+        if token_row and token_row.device and token_row.device.user_id == user_id:
+            device = token_row.device
+
+    entry = Blacklist.query.filter(Blacklist.ip_address == ip_address).first()
+    if not entry:
+        entry = Blacklist(user_id=user_id, ip_address=ip_address, reason=reason)
+        db.session.add(entry)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            entry = Blacklist.query.filter(Blacklist.ip_address == ip_address).first()
+    else:
+        if reason and not entry.reason:
+            entry.reason = reason
+            db.session.commit()
+
+    if device:
+        try:
+            mqtt_service._queue_block_for_device(device, ip_address)
+        except Exception:
+            # Swallow MQTT sync errors; entry already recorded.
+            pass
+
+    return jsonify({"entry": _serialize_entry(entry), "synced": bool(device)})
 
 
 @blacklist_bp.route("/<int:entry_id>", methods=["DELETE"])

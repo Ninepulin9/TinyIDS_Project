@@ -3,6 +3,7 @@ import { Filter, Search, ShieldAlert } from 'lucide-react'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts'
+import toast from 'react-hot-toast'
 
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
@@ -175,6 +176,13 @@ const resolveDeviceName = (log, tokenNameMap) => {
   return mappedName || baseName
 }
 
+const resolveDeviceId = (log, tokenIdMap) => {
+  if (log?.device_id != null) return log.device_id
+  const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
+  const mappedId = tokenValue ? tokenIdMap.get(tokenValue) : null
+  return mappedId ?? null
+}
+
 const shouldHideUnknownLog = (log, tokenNameMap) => {
   const name = String(resolveDeviceName(log, tokenNameMap) ?? '').trim().toLowerCase()
   if (!name || name === 'unknown') {
@@ -205,6 +213,7 @@ const LogsPage = () => {
   })
   const [blockedByDevice, setBlockedByDevice] = useState(new Map())
   const [blockStatusLoading, setBlockStatusLoading] = useState(false)
+  const [blockSubmitting, setBlockSubmitting] = useState(new Set())
   const [page, setPage] = useState(1)
   const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
@@ -319,6 +328,60 @@ const LogsPage = () => {
       }
     },
     [deviceList, loadBlockedFromSettings, requestSettingsForDevices],
+  )
+
+  const handleBlock = useCallback(
+    async (log) => {
+      const ipValue = String(log?.source_ip ?? '').trim()
+      if (!ipValue) {
+        toast.error('IP address not found.')
+        return
+      }
+      if (!isValidIp(ipValue)) {
+        toast.error(`Cannot block ${ipValue}`)
+        return
+      }
+      const ipKey = ipValue.toLowerCase()
+      setBlockSubmitting((prev) => {
+        const next = new Set(prev)
+        next.add(ipKey)
+        return next
+      })
+      try {
+        const deviceId = resolveDeviceId(log, tokenIdMap)
+        const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
+        await api.post('/api/blacklist', {
+          ip_address: ipValue,
+          reason: log.alert_msg || log.type || 'Manual block',
+          device_id: deviceId ?? undefined,
+          token: tokenValue || undefined,
+        })
+        toast.success(`Blocked ${ipValue}`)
+        if (deviceId != null) {
+          setBlockedByDevice((prev) => {
+            const next = new Map(prev)
+            const key = String(deviceId)
+            const existing = next.get(key) ?? new Set()
+            const updated = new Set(existing)
+            updated.add(ipKey)
+            next.set(key, updated)
+            return next
+          })
+        }
+        await refreshBlockedStatus()
+      } catch (err) {
+        const message =
+          err?.response?.data?.message ?? err?.message ?? `Failed to block ${ipValue}`
+        toast.error(message)
+      } finally {
+        setBlockSubmitting((prev) => {
+          const next = new Set(prev)
+          next.delete(ipKey)
+          return next
+        })
+      }
+    },
+    [refreshBlockedStatus, tokenIdMap],
   )
 
   const fetchLatest = useCallback(
@@ -697,24 +760,25 @@ const LogsPage = () => {
                 <th className="px-4 py-3">Alert Message</th>
                 <th className="px-4 py-3 text-right">Alert IP</th>
                 <th className="px-4 py-3 text-right">Block Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan="7" className="px-4 py-6 text-center text-sm text-slate-500">
                     Loading intrusion logs...
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-6 text-center text-sm text-rose-500">
+                  <td colSpan="7" className="px-4 py-6 text-center text-sm text-rose-500">
                     {error}
                   </td>
                 </tr>
               ) : pagedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan="7" className="px-4 py-10 text-center text-sm text-slate-500">
                     No intrusion events match the current search.
                   </td>
                 </tr>
@@ -730,6 +794,9 @@ const LogsPage = () => {
                   const typeLabel = String(log.type ?? '')
                   const isSettings = typeLabel.trim().toLowerCase() === 'esp settings'
                   const displayName = resolveDeviceName(log, tokenNameMap)
+                  const ipValue = String(log.source_ip ?? '').trim()
+                  const canBlock = ipValue && isValidIp(ipValue)
+                  const isSubmitting = canBlock && blockSubmitting.has(ipValue.toLowerCase())
                   return (
                     <tr key={log.id} className="hover:bg-slate-50/70">
                       <td className="px-4 py-3 font-medium text-slate-700">{formatTimestamp(log.timestamp)}</td>
@@ -758,6 +825,24 @@ const LogsPage = () => {
                         >
                           {showLoadingStatus ? 'Loading...' : isBlocked ? 'Blocked' : 'Not Blocked'}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {canBlock ? (
+                          <button
+                            type="button"
+                            onClick={() => handleBlock(log)}
+                            disabled={isBlocked || isSubmitting}
+                            className={`inline-flex items-center rounded-full border px-4 py-1 text-xs font-semibold transition ${
+                              isBlocked
+                                ? 'cursor-not-allowed border-emerald-200 text-emerald-600'
+                                : 'border-slate-200 text-slate-700 hover:border-rose-200 hover:text-rose-600'
+                            }`}
+                          >
+                            {isSubmitting ? 'Blocking...' : isBlocked ? 'Blocked' : 'Block'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">--</span>
+                        )}
                       </td>
                     </tr>
                   )
