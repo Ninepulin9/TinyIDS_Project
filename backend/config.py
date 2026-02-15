@@ -24,8 +24,10 @@ class Settings:
     MQTT_TLS_ENABLED = os.getenv("MQTT_TLS_ENABLED", "false").lower() == "true"
     MQTT_TLS_CA_CERTS = os.getenv("MQTT_TLS_CA_CERTS")
     MQTT_TLS_INSECURE = os.getenv("MQTT_TLS_INSECURE", "false").lower() == "true"
-    MQTT_DISCOVERY_INTERVAL = int(os.getenv("MQTT_DISCOVERY_INTERVAL", 15))
+    MQTT_DISCOVERY_INTERVAL = int(os.getenv("MQTT_DISCOVERY_INTERVAL", 0))
+    MQTT_SETTINGS_POLL_INTERVAL = int(os.getenv("MQTT_SETTINGS_POLL_INTERVAL", 0))
     MQTT_ALLOW_REREGISTER = os.getenv("MQTT_ALLOW_REREGISTER", "false").lower() == "true"
+    MQTT_AUTO_DISCOVERY = os.getenv("MQTT_AUTO_DISCOVERY", "false").lower() == "true"
 
 
 settings = Settings()

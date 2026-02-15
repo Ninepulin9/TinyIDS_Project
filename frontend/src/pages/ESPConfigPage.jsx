@@ -16,7 +16,10 @@ const ESPConfigPage = () => {
   const [selectedWifiDevice, setSelectedWifiDevice] = useState(null)
   const [selectedMqttDevice, setSelectedMqttDevice] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
-  const [discovering, setDiscovering] = useState(false)
+  const [registerOpen, setRegisterOpen] = useState(false)
+  const [registerMac, setRegisterMac] = useState('')
+  const [registerToken, setRegisterToken] = useState('')
+  const [registering, setRegistering] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [reregisterTarget, setReregisterTarget] = useState(null)
@@ -294,19 +297,31 @@ const ESPConfigPage = () => {
     }
   }
 
-  const handleDiscover = async () => {
-    setDiscovering(true)
+  const handleRegisterSubmit = async () => {
+    const mac = registerMac.trim()
+    const token = registerToken.trim()
+    if (!mac || !token) {
+      toast.error('MAC address and token are required.')
+      return
+    }
+    setRegistering(true)
     try {
-      const { data } = await api.post('/api/devices/discover', { nonce_length: 8 })
-      toast.success(`Sent DISCOVER (${data?.nonce ?? 'ok'})`)
+      await api.post('/api/devices/discover', {
+        mac_address: mac,
+        token,
+      })
+      toast.success('Sent register request.')
+      setRegisterOpen(false)
+      setRegisterMac('')
+      setRegisterToken('')
     } catch (err) {
       const message =
         err?.response?.data?.message ??
         err?.message ??
-        'Unable to send DISCOVER. Please try again.'
+        'Unable to register device. Please try again.'
       toast.error(message)
     } finally {
-      setDiscovering(false)
+      setRegistering(false)
     }
   }
 
@@ -321,11 +336,10 @@ const ESPConfigPage = () => {
         </div>
         <button
           type="button"
-          onClick={handleDiscover}
-          disabled={discovering}
-          className="inline-flex items-center justify-center rounded-full bg-white/15 px-5 py-2 text-sm font-semibold text-white transition hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-70"
+          onClick={() => setRegisterOpen(true)}
+          className="inline-flex items-center justify-center rounded-full bg-white/15 px-5 py-2 text-sm font-semibold text-white transition hover:bg-white/25"
         >
-          {discovering ? 'Discovering...' : 'DISCOVER'}
+          REGISTER
         </button>
       </header>
 
@@ -457,6 +471,52 @@ const ESPConfigPage = () => {
                 className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
               >
                 Yes, re-register
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {registerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Register ESP32</h3>
+            <p className="mt-2 text-sm text-slate-600">Enter MAC address and token from the ESP.</p>
+            <div className="mt-4 space-y-3">
+              <input
+                type="text"
+                value={registerMac}
+                onChange={(e) => setRegisterMac(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+                placeholder="MAC address (e.g., 8C:AA:B5:94:5F:24)"
+              />
+              <input
+                type="text"
+                value={registerToken}
+                onChange={(e) => setRegisterToken(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+                placeholder="Token"
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRegisterOpen(false)
+                  setRegisterMac('')
+                  setRegisterToken('')
+                }}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRegisterSubmit}
+                disabled={registering}
+                className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {registering ? 'Registering...' : 'Register'}
               </button>
             </div>
           </div>

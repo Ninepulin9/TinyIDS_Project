@@ -277,7 +277,10 @@ def publish_to_device(device_id: int):
             return jsonify({"message": "token not set for this device"}), HTTPStatus.BAD_REQUEST
         topic = f"{topic_base}-{token_value}"
     else:
-        topic = topic_base
+        if token_value and topic_base.lower() == "esp/setting/control":
+            topic = mqtt_service._control_topic_for_token(token_value)
+        else:
+            topic = topic_base
 
     if message is not None and isinstance(message, (dict, list)):
         # if user accidentally sends JSON in message, convert to string to preserve intention
@@ -358,12 +361,15 @@ def discover_device():
     if not mqtt_service.client:
         return jsonify({"message": "MQTT client not connected"}), HTTPStatus.SERVICE_UNAVAILABLE
     payload = request.get_json(silent=True) or {}
-    try:
-        nonce_length = int(payload.get("nonce_length", 8))
-    except (TypeError, ValueError):
-        return jsonify({"message": "nonce_length must be an integer"}), HTTPStatus.BAD_REQUEST
+    mac_address = (payload.get("mac_address") or payload.get("mac") or "").strip()
+    token_value = (payload.get("token") or "").strip()
+    if not mac_address or not token_value:
+        return (
+            jsonify({"message": "mac_address and token are required"}),
+            HTTPStatus.BAD_REQUEST,
+        )
     topic = payload.get("topic")
-    nonce = mqtt_service.publish_discover(nonce_length=nonce_length, topic=topic)
-    if not nonce:
+    ok = mqtt_service.request_registration(mac_address, token_value, topic=topic)
+    if not ok:
         return jsonify({"message": "Unable to publish discovery"}), HTTPStatus.SERVICE_UNAVAILABLE
-    return jsonify({"nonce": nonce, "topic": topic or mqtt_service.discovery_topic})
+    return jsonify({"status": "sent", "topic": topic or mqtt_service.discovery_topic})

@@ -9,13 +9,16 @@ services:
       - DATABASE_URL=mysql+pymysql://tinyids:tinyids@db:3306/tinyids
       - JWT_SECRET_KEY=super-secret-jwt
       - SECRET_KEY=super-secret-key
-      - MQTT_BROKER_URL=test.mosquitto.org
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL}
+      - MQTT_USERNAME=${MQTT_USERNAME}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
       - MQTT_TOPICS=esp/alert,esp/setting/now,esp/setting/Now,esp/setting/#,esp/alive,esp/Entrance,esp/esp/Entrance
-      - MQTT_BROKER_PORT=8883
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-8883}
       - MQTT_TLS_ENABLED=true
-      - MQTT_TLS_CA_CERTS=/certs/mosquitto.org.crt
+      - MQTT_TLS_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
       - MQTT_TLS_INSECURE=false
-      - MQTT_DISCOVERY_INTERVAL=5
+      - MQTT_DISCOVERY_INTERVAL=0
+      - MQTT_AUTO_DISCOVERY=false
       - MQTT_SETTINGS_POLL_INTERVAL=10
       - ALLOWED_ORIGIN=*
       - CORS_ORIGINS=*
@@ -23,7 +26,6 @@ services:
       - "5000:5000"
     volumes:
       - ./backend:/app
-      - /home/pi/mosquitto.org.crt:/certs/mosquitto.org.crt:ro
     depends_on:
       db:
         condition: service_healthy

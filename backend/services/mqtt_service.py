@@ -1,7 +1,6 @@
 import json
 import re
 import secrets
-import string
 import threading
 import time
 from datetime import datetime
@@ -24,15 +23,17 @@ class MQTTService:
         self.fallback_topics: set[str] = set()
         self.discovery_topic = "esp/Entrance"
         self.discovery_interval = 0
+        self.auto_discovery_enabled = False
         self.settings_poll_interval = 0
         self.allow_reregister = True
         self.reregister_once: set[str] = set()
-        self.pending_nonces: dict[str, float] = {}
-        self.pending_lock = threading.Lock()
+        self.pending_registrations: dict[str, dict] = {}
+        self.registration_lock = threading.Lock()
         self.discovery_thread_started = False
         self.settings_poll_thread_started = False
         self.latest_settings: dict[str, dict] = {}
         self.pending_blocks: dict[str, set[str]] = {}
+        self.session_codes: dict[str, str] = {}
 
     def init_app(self, app) -> None:
         self.app = app
@@ -57,6 +58,7 @@ class MQTTService:
         self.discovery_interval = int(app.config.get("MQTT_DISCOVERY_INTERVAL", 0) or 0)
         self.settings_poll_interval = int(app.config.get("MQTT_SETTINGS_POLL_INTERVAL", 0) or 0)
         self.allow_reregister = bool(app.config.get("MQTT_ALLOW_REREGISTER", True))
+        self.auto_discovery_enabled = bool(app.config.get("MQTT_AUTO_DISCOVERY", False))
         self.topics = self._resolve_topics()
         self.fallback_topics = {
             topic.lower()
@@ -138,7 +140,7 @@ class MQTTService:
 
         with self.app.app_context():
             if topic_key in {"esp/entrance", "esp/esp/entrance"}:
-                if self._handle_discovery_reply(payload, topic):
+                if self._handle_registration_reply(payload, topic):
                     return
             if topic_key == "esp/alert":
                 self._handle_alert(payload, topic)
@@ -238,63 +240,97 @@ class MQTTService:
         db.session.commit()
         self._emit_log(log, device)
 
-    def publish_discover(self, nonce_length: int = 8, topic: str | None = None) -> str | None:
+    def publish_discover(self, topic: str | None = None) -> bool:
         if not self.client:
-            return None
-        nonce = self._generate_nonce(nonce_length)
-        with self.pending_lock:
-            self._prune_pending_nonces()
-            if len(self.pending_nonces) > 200:
-                self._drop_oldest_nonces(100)
-            while nonce in self.pending_nonces:
-                nonce = self._generate_nonce(nonce_length)
-            self.pending_nonces[nonce] = time.time()
-        payload = {"cmd": "DISCOVER", "nonce": nonce}
+            return False
+        payload = {"cmd": "DISCOVER"}
         target_topic = topic or self.discovery_topic
         self.client.publish(target_topic, json.dumps(payload), qos=0, retain=False)
-        return nonce
-
-    def _handle_discovery_reply(self, payload: dict, topic: str) -> bool:
-        nonce = self._coerce_str(payload.get("nonce"))
-        token = self._coerce_str(payload.get("token"))
-        device_id = self._coerce_str(payload.get("device_id") or payload.get("deviceId"))
-        if not nonce or not token or not device_id:
-            return False
-        with self.pending_lock:
-            if nonce not in self.pending_nonces:
-                return False
-            self.pending_nonces.pop(nonce, None)
-        existing = Device.query.filter_by(esp_id=device_id).first()
-        if existing and existing.token:
-            if device_id in self.reregister_once or self.allow_reregister:
-                self.reregister_once.discard(device_id)
-                device = self._register_discovered_device(device_id, token, update_token=True)
-            else:
-                self.app.logger.info("Discovery ignored for %s; already registered", device_id)
-                return True
-        else:
-            device = self._register_discovered_device(device_id, token, update_token=False)
-        if device and self.client:
-            confirm_message = f"Confirm-{nonce}-{token}"
-            self.client.publish(self.discovery_topic, confirm_message, qos=0, retain=False)
-            self.app.logger.info("Discovery confirmed for %s with nonce %s", device_id, nonce)
         return True
 
-    def _register_discovered_device(self, device_id: str, token: str, update_token: bool = False) -> Device | None:
+    def request_registration(self, mac_address: str, token: str, topic: str | None = None) -> bool:
+        if not self.client:
+            return False
+        mac_value = self._coerce_str(mac_address)
+        token_value = self._coerce_str(token)
+        if not mac_value or not token_value:
+            return False
+        now = time.time()
+        with self.registration_lock:
+            self._prune_pending_registrations()
+            self.pending_registrations[token_value.lower()] = {
+                "mac": mac_value.lower(),
+                "ts": now,
+            }
+        return self.publish_discover(topic=topic)
+
+    def _handle_registration_reply(self, payload: dict, topic: str) -> bool:
+        mac_value = self._coerce_str(
+            payload.get("mac")
+            or payload.get("mac_address")
+            or payload.get("macAddress")
+        )
+        token_value = self._coerce_str(payload.get("token"))
+        if not mac_value or not token_value:
+            return False
+        key = token_value.lower()
+        with self.registration_lock:
+            entry = self.pending_registrations.get(key)
+            if not entry:
+                return False
+            if entry.get("mac") != mac_value.lower():
+                return False
+            self.pending_registrations.pop(key, None)
+
+        device = self._register_device_from_registration(mac_value, token_value)
+        if device and self.client:
+            session_code = self._generate_session_code()
+            self.session_codes[token_value] = session_code
+            confirm_message = f"Confirm-{session_code}-{token_value}"
+            self.client.publish(self.discovery_topic, confirm_message, qos=0, retain=False)
+            if self.app:
+                self.app.logger.info("Registration confirmed for %s with code %s", mac_value, session_code)
+            socketio.emit(
+                "device:registered",
+                {"device_id": device.id, "esp_id": device.esp_id},
+            )
+        return True
+
+    def _register_device_from_registration(self, mac_address: str, token: str) -> Device | None:
         owner = User.query.first()
         if not owner:
-            self.app.logger.warning("No user found; skipping auto-registration for %s", device_id)
+            if self.app:
+                self.app.logger.warning("No user found; skipping registration for %s", mac_address)
             return None
-        device = Device.query.filter_by(esp_id=device_id).first()
+        mac_value = mac_address.strip()
+        device = Device.query.filter_by(esp_id=mac_value).first()
         if not device:
-            device = Device(user_id=owner.id, name="ESP32", esp_id=device_id, is_active=True)
+            device = (
+                Device.query.filter(Device.user_id == owner.id)
+                .filter(func.lower(Device.mac_address) == mac_value.lower())
+                .first()
+            )
+        if not device:
+            device = Device(
+                user_id=owner.id,
+                name="ESP32",
+                esp_id=mac_value,
+                mac_address=mac_value,
+                is_active=True,
+            )
             db.session.add(device)
             db.session.flush()
+        else:
+            device.is_active = True
+            device.mac_address = mac_value
+            if device.esp_id != mac_value:
+                device.esp_id = mac_value
+
         if device.token:
-            if update_token:
-                device.token.token = token
+            device.token.token = token
         else:
             db.session.add(DeviceToken(device_id=device.id, token=token))
+
         profile = device.network_profile
         if not profile:
             profile = DeviceNetworkProfile(device_id=device.id, user_id=owner.id)
@@ -302,38 +338,30 @@ class MQTTService:
             device.network_profile = profile
         profile.last_seen = datetime.utcnow()
         db.session.commit()
-        socketio.emit(
-            "device:registered",
-            {"device_id": device.id, "esp_id": device.esp_id},
-        )
         return device
 
     def request_reregister(self, device_id: str) -> None:
         self.reregister_once.add(device_id)
 
-    def _generate_nonce(self, length: int = 8) -> str:
-        prefix = "N-"
-        max_total = 10
-        max_random = max_total - len(prefix)
-        random_len = max(1, min(int(length), max_random))
-        alphabet = string.ascii_letters + string.digits
-        return prefix + "".join(secrets.choice(alphabet) for _ in range(random_len))
+    def _generate_session_code(self) -> str:
+        return f"{secrets.randbelow(9000) + 1000:04d}"
 
-    def _prune_pending_nonces(self, ttl_sec: int = 300) -> None:
+    def _prune_pending_registrations(self, ttl_sec: int = 300) -> None:
         now = time.time()
-        stale = [nonce for nonce, ts in self.pending_nonces.items() if now - ts > ttl_sec]
-        for nonce in stale:
-            self.pending_nonces.pop(nonce, None)
-
-    def _drop_oldest_nonces(self, count: int) -> None:
-        if count <= 0 or not self.pending_nonces:
-            return
-        sorted_nonces = sorted(self.pending_nonces.items(), key=lambda item: item[1])
-        for nonce, _ in sorted_nonces[:count]:
-            self.pending_nonces.pop(nonce, None)
+        stale = [
+            key
+            for key, entry in self.pending_registrations.items()
+            if now - float(entry.get("ts", 0)) > ttl_sec
+        ]
+        for key in stale:
+            self.pending_registrations.pop(key, None)
 
     def _start_discovery_loop(self) -> None:
-        if self.discovery_thread_started or self.discovery_interval <= 0:
+        if (
+            self.discovery_thread_started
+            or self.discovery_interval <= 0
+            or not self.auto_discovery_enabled
+        ):
             return
         self.discovery_thread_started = True
 
@@ -371,8 +399,9 @@ class MQTTService:
                                 if user_id not in blocked_by_user:
                                     blocked_by_user[user_id] = self._get_blacklist_ips(user_id)
                                 # Request latest settings (same as Rule Management)
+                                control_topic = self._control_topic_for_token(token_value)
                                 self.client.publish(
-                                    "esp/setting/Control",
+                                    control_topic,
                                     f"showsetting-{token_value}",
                                     qos=0,
                                     retain=False,
@@ -419,7 +448,7 @@ class MQTTService:
         payload["token"] = token_value
         payload["blocked_ips"] = merged
         self.latest_settings[token_value] = dict(payload)
-        topic = "esp/setting/Control"
+        topic = self._control_topic_for_token(token_value)
         try:
             self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
             if self.app:
@@ -492,19 +521,6 @@ class MQTTService:
                 .filter(func.lower(Device.name) == device_name.lower())
                 .first()
             )
-
-        if not device:
-            device = Device.query.filter_by(user_id=owner_id, esp_id="unknown").first()
-
-        if not device:
-            device = Device(
-                user_id=owner_id,
-                name=device_name or "ESP32",
-                esp_id=esp_id or "unknown",
-            )
-            db.session.add(device)
-            db.session.flush()
-
         return device
 
     def _touch_device(self, device: Device, payload: dict, mark_active: bool | None) -> None:
@@ -660,8 +676,9 @@ class MQTTService:
         else:
             # Request fresh settings so we can merge with full payload
             if self.client:
+                control_topic = self._control_topic_for_token(token_value)
                 self.client.publish(
-                    "esp/setting/Control",
+                    control_topic,
                     f"showsetting-{token_value}",
                     qos=0,
                     retain=False,
@@ -683,10 +700,17 @@ class MQTTService:
         payload["blocked_ips"] = merged
         self.latest_settings[token_value] = dict(payload)
         try:
-            self.client.publish("esp/setting/Control", json.dumps(payload), qos=0, retain=False)
+            control_topic = self._control_topic_for_token(token_value)
+            self.client.publish(control_topic, json.dumps(payload), qos=0, retain=False)
         except Exception as exc:  # noqa: BLE001
             if self.app:
                 self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
+
+    def _control_topic_for_token(self, token_value: str) -> str:
+        code = self.session_codes.get(token_value)
+        if code:
+            return f"esp/setting/Control-{code}"
+        return "esp/setting/Control"
 
 
 
