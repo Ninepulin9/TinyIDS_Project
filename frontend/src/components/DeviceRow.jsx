@@ -69,16 +69,23 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
         </p>
       </td>
       <td className="px-4 py-4 align-middle text-sm text-slate-600">
-        <div className="font-mono text-sm font-semibold text-slate-800">
-          {device.ip_address ?? '--'}
-        </div>
-        <div className="mt-1 flex items-center gap-2 text-xs">
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            MAC
-          </span>
-          <span className="font-mono font-semibold text-slate-700">
-            {device.mac_address ?? '--'}
-          </span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              IP
+            </span>
+            <span className="font-mono text-sm font-semibold text-slate-800">
+              {device.ip_address ?? '--'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              MAC
+            </span>
+            <span className="font-mono text-xs font-semibold text-slate-600">
+              {device.mac_address ?? '--'}
+            </span>
+          </div>
         </div>
       </td>
       <td className="px-4 py-4 align-middle hidden">
@@ -95,21 +102,23 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
           label={`Toggle ${device.device_name} alert mode`}
         />
       </td>
-      <td className="px-4 py-4 align-middle text-right pr-6 whitespace-nowrap">
-        <button
-          type="button"
-          className="mr-2 rounded-full border border-sky-500 bg-white px-4 py-2 text-xs font-semibold text-sky-600 transition hover:bg-sky-50 hover:text-sky-700"
-          onClick={handleReregister}
-        >
-          Re-register
-        </button>
-        <button
-          type="button"
-          className="rounded-full border border-rose-500 bg-white px-4 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
-          onClick={handleDelete}
-        >
-          Delete
-        </button>
+      <td className="px-4 py-4 align-middle">
+        <div className="flex items-center justify-center gap-2 whitespace-nowrap">
+          <button
+            type="button"
+            className="rounded-full border border-sky-500 bg-white px-4 py-2 text-xs font-semibold text-sky-600 transition hover:bg-sky-50 hover:text-sky-700"
+            onClick={handleReregister}
+          >
+            Re-register
+          </button>
+          <button
+            type="button"
+            className="rounded-full border border-rose-500 bg-white px-4 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"
+            onClick={handleDelete}
+          >
+            Delete
+          </button>
+        </div>
       </td>
     </tr>
   )
