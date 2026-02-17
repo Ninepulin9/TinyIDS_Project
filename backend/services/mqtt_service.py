@@ -712,6 +712,18 @@ class MQTTService:
             return f"esp/setting/Control-{code}"
         return "esp/setting/Control"
 
+    def _alive_topic_for_token(self, token_value: str) -> str:
+        code = self.session_codes.get(token_value)
+        if code:
+            return f"esp/Alive/Check-{code}"
+        return "esp/Alive/Check"
+
+    def _alive_setting_topic_for_token(self, token_value: str) -> str:
+        code = self.session_codes.get(token_value)
+        if code:
+            return f"esp/alive/setting-{code}"
+        return "esp/alive/setting"
+
 
 
 mqtt_service = MQTTService()
