@@ -669,16 +669,23 @@ const RuleManagementPage = () => {
                     </td>
                     <td className="px-4 py-3">{renderOnlineStatus(device)}</td>
                     <td className="px-4 py-3 text-slate-600">
-                      <div className="font-mono text-sm font-semibold text-slate-800">
-                        {device.ip_address ?? '--'}
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 text-xs">
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                          MAC
-                        </span>
-                        <span className="font-mono font-semibold text-slate-700">
-                          {device.mac_address ?? '--'}
-                        </span>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            IP
+                          </span>
+                          <span className="font-mono text-sm font-semibold text-slate-800">
+                            {device.ip_address ?? '--'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            MAC
+                          </span>
+                          <span className="font-mono text-xs font-semibold text-slate-600">
+                            {device.mac_address ?? '--'}
+                          </span>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
