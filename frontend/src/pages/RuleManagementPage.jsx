@@ -739,20 +739,7 @@ const RuleManagementPage = () => {
                 <Spinner label="Loading settings..." />
               ) : (
                 <div className="space-y-5">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="text-sm font-semibold text-slate-700">Token</label>
-                      <input
-                        type="text"
-                        value={ruleValues.token}
-                        readOnly
-                        className="mt-2 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                        placeholder="Auto-filled from device registration"
-                      />
-                      <p className="mt-1 text-xs text-slate-500">Token is stored when the board registers.</p>
-                      {ruleErrors.token && <p className="mt-1 text-xs text-rose-500">{ruleErrors.token}</p>}
-                    </div>
-                    <div className="flex items-end justify-end gap-2">
+                  <div className="flex flex-wrap items-end justify-end gap-2">
                       <button
                         type="button"
                         onClick={handleSave}
@@ -771,7 +758,6 @@ const RuleManagementPage = () => {
                       >
                         Set to Default
                       </button>
-                    </div>
                   </div>
 
                   <div className="space-y-4">
