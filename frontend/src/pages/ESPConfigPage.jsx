@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
@@ -29,6 +30,7 @@ const ESPConfigPage = () => {
   const pingIntervalRef = useRef(null)
   const initialPingRef = useRef(false)
   const lastAlivePingRef = useRef(0)
+  const location = useLocation()
 
   const dedupeDevices = (list) => {
     const byKey = new Map()
@@ -98,8 +100,10 @@ const ESPConfigPage = () => {
   }, [])
 
   useEffect(() => {
+    if (location.pathname !== '/devices') return
+    lastAlivePingRef.current = 0
     fetchDevices()
-  }, [fetchDevices])
+  }, [fetchDevices, location.pathname])
 
   useEffect(() => {
     const socket = getSocket()
