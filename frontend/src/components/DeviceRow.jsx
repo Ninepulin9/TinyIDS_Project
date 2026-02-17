@@ -1,4 +1,5 @@
 import dayjs from 'dayjs'
+import { Pencil } from 'lucide-react'
 import Badge from './ui/Badge.jsx'
 import Toggle from './ui/Toggle.jsx'
 
@@ -29,12 +30,18 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
 
   return (
     <tr className="border-b border-slate-100 last:border-none hover:bg-slate-50/70 transition">
-      <td
-        className="px-4 py-4 align-middle text-sm font-semibold text-slate-900"
-        onDoubleClick={() => onRename?.(device)}
-        title="Double click to rename"
-      >
-        {device.device_name}
+      <td className="px-4 py-4 align-middle text-sm font-semibold text-slate-900">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-900">{device.device_name}</span>
+          <button
+            type="button"
+            onClick={() => onRename?.(device)}
+            title="Rename"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:border-sky-300 hover:text-sky-600"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </td>
       <td className="px-4 py-4 align-middle">
         <Badge variant={statusVariant(device.status)}>

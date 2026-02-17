@@ -28,6 +28,7 @@ const ESPConfigPage = () => {
   const [aliveCheckAt, setAliveCheckAt] = useState(null)
   const pingIntervalRef = useRef(null)
   const initialPingRef = useRef(false)
+  const lastAlivePingRef = useRef(0)
 
   const dedupeDevices = (list) => {
     const byKey = new Map()
@@ -48,13 +49,40 @@ const ESPConfigPage = () => {
     return Array.from(byKey.values())
   }
 
+  const sendAliveCheck = useCallback(async (list) => {
+    const liveDevices = list.filter((d) => d?.id && d.token)
+    if (!liveDevices.length) return
+    const now = Date.now()
+    if (now - lastAlivePingRef.current < 5000) return
+    lastAlivePingRef.current = now
+    const needsCheck = liveDevices.some((device) => !device?.last_seen)
+    if (needsCheck) {
+      setAliveCheckAt(now)
+    }
+    try {
+      await Promise.all(
+        liveDevices.map((device) =>
+          api.post(`/api/devices/${device.id}/publish`, {
+            topic_base: 'esp/Alive/Check',
+            message: `Test-${device.token}`,
+            append_token: false,
+          }),
+        ),
+      )
+    } catch (err) {
+      console.warn('Ping devices failed', err)
+    }
+  }, [])
+
   const fetchDevices = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const { data } = await api.get('/api/devices')
       const fetchedDevices = Array.isArray(data) ? data : []
-      setDevices(dedupeDevices(fetchedDevices))
+      const deduped = dedupeDevices(fetchedDevices)
+      setDevices(deduped)
+      sendAliveCheck(deduped)
     } catch (err) {
       const message =
         err?.response?.data?.message ??
@@ -100,22 +128,8 @@ const ESPConfigPage = () => {
   }, [fetchDevices])
 
   const pingDevices = useCallback(async () => {
-    const liveDevices = devices.filter((d) => d?.id && d.token)
-    if (!liveDevices.length) return
-    try {
-      await Promise.all(
-        liveDevices.map((device) =>
-          api.post(`/api/devices/${device.id}/publish`, {
-            topic_base: 'esp/Alive/Check',
-            message: `Test-${device.token}`,
-            append_token: false,
-          }),
-        ),
-      )
-    } catch (err) {
-      console.warn('Ping devices failed', err)
-    }
-  }, [devices])
+    await sendAliveCheck(devices)
+  }, [devices, sendAliveCheck])
 
   useEffect(() => {
     if (pingIntervalRef.current) {
