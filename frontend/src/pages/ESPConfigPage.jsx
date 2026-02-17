@@ -27,9 +27,12 @@ const ESPConfigPage = () => {
   const [renameTarget, setRenameTarget] = useState(null)
   const [renameValue, setRenameValue] = useState('')
   const [aliveCheckAt, setAliveCheckAt] = useState(null)
+  const registrationPollLimitRef = useRef(40)
   const pingIntervalRef = useRef(null)
   const initialPingRef = useRef(false)
   const lastAlivePingRef = useRef(0)
+  const registrationPollRef = useRef({ timer: null, attempts: 0 })
+  const pendingRegistrationRef = useRef({ mac: '', token: '' })
   const location = useLocation()
 
   const dedupeDevices = (list) => {
@@ -76,8 +79,32 @@ const ESPConfigPage = () => {
     }
   }, [])
 
-  const fetchDevices = useCallback(async () => {
-    setLoading(true)
+  const clearRegistrationPoll = useCallback(() => {
+    if (registrationPollRef.current.timer) {
+      clearInterval(registrationPollRef.current.timer)
+      registrationPollRef.current.timer = null
+    }
+    registrationPollRef.current.attempts = 0
+  }, [])
+
+  const matchesPendingRegistration = useCallback((list) => {
+    const pending = pendingRegistrationRef.current
+    const mac = String(pending.mac ?? '').trim().toLowerCase()
+    const token = String(pending.token ?? '').trim().toLowerCase()
+    if (!mac && !token) return false
+    return list.some((device) => {
+      const deviceMac = String(device?.mac_address ?? device?.esp_id ?? '').trim().toLowerCase()
+      const deviceToken = String(device?.token ?? '').trim().toLowerCase()
+      if (mac && deviceMac && deviceMac === mac) return true
+      if (token && deviceToken && deviceToken === token) return true
+      return false
+    })
+  }, [])
+
+  const fetchDevices = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true)
+    }
     setError('')
     try {
       const { data } = await api.get('/api/devices')
@@ -85,6 +112,11 @@ const ESPConfigPage = () => {
       const deduped = dedupeDevices(fetchedDevices)
       setDevices(deduped)
       sendAliveCheck(deduped)
+      if (matchesPendingRegistration(deduped)) {
+        pendingRegistrationRef.current = { mac: '', token: '' }
+        clearRegistrationPoll()
+        toast.success('Device registered')
+      }
     } catch (err) {
       const message =
         err?.response?.data?.message ??
@@ -95,31 +127,50 @@ const ESPConfigPage = () => {
       setError(message)
       toast.error(message)
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
-  }, [])
+  }, [clearRegistrationPoll, matchesPendingRegistration, sendAliveCheck])
+
+  const startRegistrationPoll = useCallback(() => {
+    clearRegistrationPoll()
+    registrationPollRef.current.attempts = 0
+    const poll = () => {
+      registrationPollRef.current.attempts += 1
+      fetchDevices({ silent: true })
+      if (registrationPollRef.current.attempts >= registrationPollLimitRef.current) {
+        clearRegistrationPoll()
+      }
+    }
+    poll()
+    registrationPollRef.current.timer = setInterval(poll, 3000)
+  }, [clearRegistrationPoll, fetchDevices])
 
   useEffect(() => {
     if (location.pathname !== '/devices') return
     lastAlivePingRef.current = 0
     fetchDevices()
+    return () => {
+      clearRegistrationPoll()
+    }
   }, [fetchDevices, location.pathname])
 
   useEffect(() => {
     const socket = getSocket()
     const handleRegistered = () => {
-      fetchDevices()
+      fetchDevices({ silent: true })
     }
     const handleLogNew = (payload) => {
       const data = payload?.payload ?? payload
       if (!data || typeof data !== 'object') return
       const topic = String(data._mqtt_topic ?? '').toLowerCase()
       if (topic === 'esp/alive' || data.ip || data.ip_address || data.device_ip) {
-        fetchDevices()
+        fetchDevices({ silent: true })
       }
     }
     const handleDeviceUpdated = () => {
-      fetchDevices()
+      fetchDevices({ silent: true })
     }
     socket.on('device:registered', handleRegistered)
     socket.on('log:new', handleLogNew)
@@ -332,6 +383,8 @@ const ESPConfigPage = () => {
       setRegisterOpen(false)
       setRegisterMac('')
       setRegisterToken('')
+      pendingRegistrationRef.current = { mac, token }
+      startRegistrationPoll()
     } catch (err) {
       const message =
         err?.response?.data?.message ??

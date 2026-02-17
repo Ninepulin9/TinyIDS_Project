@@ -3,8 +3,9 @@ import re
 import secrets
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import paho.mqtt.client as mqtt
 from sqlalchemy import func
@@ -213,11 +214,13 @@ class MQTTService:
         device = self._resolve_device(payload)
         if not device:
             return
-        status_raw = str(payload.get("status") or payload.get("state") or "").strip().lower()
-        if status_raw in {"offline", "down", "dead", "disconnected"}:
-            device.is_active = False
-        else:
-            device.is_active = True
+        alert_raw = self._coerce_str(payload.get("alert_mode") or payload.get("alertMode"))
+        status_raw = self._coerce_str(payload.get("status") or payload.get("state"))
+        if not alert_raw and status_raw and status_raw.lower() in {"on", "off", "enabled", "disabled", "true", "false"}:
+            alert_raw = status_raw
+        if alert_raw:
+            normalized = alert_raw.lower()
+            device.is_active = normalized in {"on", "enabled", "true", "1"}
         self._touch_device(device, payload, mark_active=None)
         db.session.commit()
         socketio.emit("device:updated", {"device_id": device.id})
@@ -569,7 +572,11 @@ class MQTTService:
                     continue
                 cleaned = cleaned.replace("Z", "+00:00")
                 try:
-                    return datetime.fromisoformat(cleaned)
+                    parsed = datetime.fromisoformat(cleaned)
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=ZoneInfo("Asia/Bangkok"))
+                    parsed = parsed.astimezone(timezone.utc)
+                    return parsed.replace(tzinfo=None)
                 except ValueError:
                     continue
         return None

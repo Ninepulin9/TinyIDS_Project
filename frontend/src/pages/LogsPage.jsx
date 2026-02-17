@@ -463,6 +463,20 @@ const LogsPage = () => {
   }, [])
 
   useEffect(() => {
+    if (!devicesLoaded) return
+    if (selectedDeviceId === 'all') return
+    const exists = deviceList.some((device) => String(device.id) === String(selectedDeviceId))
+    if (!exists) {
+      setSelectedDeviceId('all')
+      try {
+        localStorage.setItem('tinyids:selectedDeviceId', 'all')
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [devicesLoaded, deviceList, selectedDeviceId])
+
+  useEffect(() => {
     const socket = getSocket()
 
     const handleLogNew = (payload) => {

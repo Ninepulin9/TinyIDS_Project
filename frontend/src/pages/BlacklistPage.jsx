@@ -252,6 +252,19 @@ const BlacklistPage = () => {
   }, [])
 
   useEffect(() => {
+    if (selectedDeviceId === 'all') return
+    const exists = devices.some((device) => String(device.id) === String(selectedDeviceId))
+    if (!exists) {
+      setSelectedDeviceId('all')
+      try {
+        localStorage.setItem('tinyids:selectedDeviceId', 'all')
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [devices, selectedDeviceId])
+
+  useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         loadBlacklist()

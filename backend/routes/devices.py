@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from http import HTTPStatus
 
@@ -47,6 +47,14 @@ def _ensure_profile(device: Device, persist: bool = False) -> DeviceNetworkProfi
     return profile
 
 
+def _to_utc_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def _serialize_device(device: Device) -> dict:
     profile = _ensure_profile(device)
     wifi = {
@@ -73,7 +81,7 @@ def _serialize_device(device: Device) -> dict:
         "is_active": bool(device.is_active),
         "ip_address": device.ip_address,
         "mac_address": device.mac_address,
-        "last_seen": profile.last_seen.isoformat() if profile.last_seen else None,
+        "last_seen": _to_utc_iso(profile.last_seen),
         "active": bool(device.is_active),
         "wifi": wifi,
         "mqtt": mqtt,
