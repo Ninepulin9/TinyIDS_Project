@@ -32,8 +32,8 @@ class MQTTService:
         self.registration_lock = threading.Lock()
         self.discovery_thread_started = False
         self.settings_poll_thread_started = False
-        self.latest_settings: dict[str, dict] = {}
-        self.pending_blocks: dict[str, set[str]] = {}
+        self.latest_settings: dict[int, dict] = {}
+        self.pending_blocks: dict[int, set[str]] = {}
         self.session_codes: dict[str, str] = {}
 
     def init_app(self, app) -> None:
@@ -190,14 +190,12 @@ class MQTTService:
         enriched.setdefault("_received_at", received_at)
         enriched.setdefault("received_at", received_at)
         enriched.setdefault("description", "Current configuration snapshot reported by ESP.")
-        token_value = self._coerce_str(enriched.get("token"))
-        if token_value:
-            self.latest_settings[token_value] = dict(enriched)
-            # Apply any pending block IPs once we have a fresh settings payload.
-            pending = self.pending_blocks.get(token_value)
-            if pending:
-                self._apply_blocklist_update(token_value, pending, enriched)
-                self.pending_blocks.pop(token_value, None)
+        self.latest_settings[device.id] = dict(enriched)
+        # Apply any pending block IPs once we have a fresh settings payload.
+        pending = self.pending_blocks.get(device.id)
+        if pending:
+            self._apply_blocklist_update(device, pending, enriched)
+            self.pending_blocks.pop(device.id, None)
         log = Log(
             user_id=device.user_id,
             device=device,
@@ -261,8 +259,8 @@ class MQTTService:
         now = time.time()
         with self.registration_lock:
             self._prune_pending_registrations()
-            self.pending_registrations[token_value.lower()] = {
-                "mac": mac_value.lower(),
+            self.pending_registrations[mac_value.lower()] = {
+                "token": token_value.lower(),
                 "ts": now,
             }
         return self.publish_discover(topic=topic)
@@ -276,19 +274,19 @@ class MQTTService:
         token_value = self._coerce_str(payload.get("token"))
         if not mac_value or not token_value:
             return False
-        key = token_value.lower()
+        key = mac_value.lower()
         with self.registration_lock:
             entry = self.pending_registrations.get(key)
             if not entry:
                 return False
-            if entry.get("mac") != mac_value.lower():
+            if entry.get("token") != token_value.lower():
                 return False
             self.pending_registrations.pop(key, None)
 
         device = self._register_device_from_registration(mac_value, token_value)
         if device and self.client:
             session_code = self._generate_session_code()
-            self.session_codes[token_value] = session_code
+            self._store_session_code(device, session_code)
             confirm_message = f"Confirm-{session_code}-{token_value}"
             self.client.publish(self.discovery_topic, confirm_message, qos=0, retain=False)
             if self.app:
@@ -306,19 +304,6 @@ class MQTTService:
                 self.app.logger.warning("No user found; skipping registration for %s", mac_address)
             return None
         mac_value = mac_address.strip()
-        existing_token = DeviceToken.query.filter_by(token=token).first()
-        if existing_token and existing_token.device_id:
-            existing_device = Device.query.filter_by(id=existing_token.device_id).first()
-            if existing_device and existing_device.mac_address:
-                if existing_device.mac_address.lower() != mac_value.lower():
-                    if self.app:
-                        self.app.logger.warning(
-                            "Registration rejected: token %s already used by %s (payload mac %s)",
-                            token,
-                            existing_device.mac_address,
-                            mac_value,
-                        )
-                    return None
         device = Device.query.filter_by(esp_id=mac_value).first()
         if not device:
             device = (
@@ -404,18 +389,18 @@ class MQTTService:
                     if self.client and self.client.is_connected():
                         with self.app.app_context():
                             devices = (
-                                db.session.query(Device.id, Device.user_id, DeviceToken.token)
-                                .join(DeviceToken, DeviceToken.device_id == Device.id)
-                                .all()
+                                Device.query.join(DeviceToken, DeviceToken.device_id == Device.id).all()
                             )
                             blocked_by_user = {}
-                            for device_id, user_id, token_value in devices:
+                            for device in devices:
+                                token_value = device.token.token if device.token else None
                                 if not token_value:
                                     continue
+                                user_id = device.user_id
                                 if user_id not in blocked_by_user:
                                     blocked_by_user[user_id] = self._get_blacklist_ips(user_id)
                                 # Request latest settings (same as Rule Management)
-                                control_topic = self._control_topic_for_token(token_value)
+                                control_topic = self._control_topic_for_device(device)
                                 self.client.publish(
                                     control_topic,
                                     f"showsetting-{token_value}",
@@ -425,7 +410,7 @@ class MQTTService:
                                 if self.app:
                                     self.app.logger.info("Settings poll: requested settings for %s", token_value)
                                 # Merge DB blacklist into device settings if missing
-                                self._sync_blacklist_to_device(token_value, blocked_by_user[user_id])
+                                self._sync_blacklist_to_device(device, blocked_by_user[user_id])
                 except Exception as exc:  # noqa: BLE001
                     if self.app:
                         self.app.logger.exception("Settings poll error: %s", exc)
@@ -446,10 +431,13 @@ class MQTTService:
             ips.append(value)
         return ips
 
-    def _sync_blacklist_to_device(self, token_value: str, blacklist_ips: list[str]) -> None:
-        if not self.client or not token_value or not blacklist_ips:
+    def _sync_blacklist_to_device(self, device: Device, blacklist_ips: list[str]) -> None:
+        if not self.client or not device or not blacklist_ips:
             return
-        cached = self.latest_settings.get(token_value, {})
+        token_value = device.token.token if device.token else None
+        if not token_value:
+            return
+        cached = self.latest_settings.get(device.id, {})
         blocked = cached.get("blocked_ips") or cached.get("BLOCKED_IPS") or []
         if isinstance(blocked, str):
             blocked_list = [item.strip() for item in blocked.split(",") if item.strip()]
@@ -463,8 +451,8 @@ class MQTTService:
         payload = dict(cached) if isinstance(cached, dict) else {}
         payload["token"] = token_value
         payload["blocked_ips"] = merged
-        self.latest_settings[token_value] = dict(payload)
-        topic = self._control_topic_for_token(token_value)
+        self.latest_settings[device.id] = dict(payload)
+        topic = self._control_topic_for_device(device)
         try:
             self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
             if self.app:
@@ -500,19 +488,20 @@ class MQTTService:
                 return True
             return device.mac_address.lower() == mac_value.lower()
 
+        if mac_value:
+            device = (
+                Device.query.filter(Device.user_id == owner_id)
+                .filter(func.lower(Device.mac_address) == mac_value.lower())
+                .first()
+            )
+            if device:
+                return device
+
         token_value = self._coerce_str(payload.get("token"))
-        if token_value:
-            token_row = DeviceToken.query.filter_by(token=token_value).first()
-            if token_row:
-                if _mac_matches(token_row.device):
-                    return token_row.device
-                if self.app:
-                    self.app.logger.warning(
-                        "Token match but MAC mismatch for token %s (payload %s != device %s)",
-                        token_value,
-                        mac_value,
-                        token_row.device.mac_address,
-                    )
+        if token_value and not mac_value:
+            token_rows = DeviceToken.query.filter_by(token=token_value).all()
+            if len(token_rows) == 1:
+                return token_rows[0].device
 
         esp_id = self._coerce_str(payload.get("esp_id") or payload.get("espId") or payload.get("espID"))
         if esp_id:
@@ -533,15 +522,6 @@ class MQTTService:
                 device = Device.query.filter_by(esp_id=esp_candidate).first()
                 if device and _mac_matches(device):
                     return device
-
-        if mac_value:
-            device = (
-                Device.query.filter(Device.user_id == owner_id)
-                .filter(func.lower(Device.mac_address) == mac_value.lower())
-                .first()
-            )
-            if device:
-                return device
 
         ip_address = self._coerce_str(payload.get("ip_address") or payload.get("ip") or payload.get("device_ip"))
         if ip_address and not mac_value:
@@ -685,7 +665,7 @@ class MQTTService:
         ip_value = self._coerce_str(ip_address)
         if not ip_value:
             return
-        cached = self.latest_settings.get(token_value, {})
+        cached = self.latest_settings.get(device.id, {})
         blocked = cached.get("blocked_ips") or cached.get("BLOCKED_IPS") or []
         if isinstance(blocked, str):
             blocked_list = [item.strip() for item in blocked.split(",") if item.strip()]
@@ -699,8 +679,8 @@ class MQTTService:
         payload = dict(cached) if isinstance(cached, dict) else {}
         payload["token"] = token_value
         payload["blocked_ips"] = blocked_list
-        self.latest_settings[token_value] = dict(payload)
-        topic = f"esp/setting/Control-{token_value}"
+        self.latest_settings[device.id] = dict(payload)
+        topic = self._control_topic_for_device(device)
         try:
             self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
         except Exception as exc:  # noqa: BLE001
@@ -712,16 +692,16 @@ class MQTTService:
         ip_value = self._coerce_str(ip_address)
         if not token_value or not ip_value:
             return
-        pending = self.pending_blocks.setdefault(token_value, set())
+        pending = self.pending_blocks.setdefault(device.id, set())
         pending.add(ip_value)
-        cached = self.latest_settings.get(token_value)
+        cached = self.latest_settings.get(device.id)
         if cached:
-            self._apply_blocklist_update(token_value, pending, cached)
-            self.pending_blocks.pop(token_value, None)
+            self._apply_blocklist_update(device, pending, cached)
+            self.pending_blocks.pop(device.id, None)
         else:
             # Request fresh settings so we can merge with full payload
             if self.client:
-                control_topic = self._control_topic_for_token(token_value)
+                control_topic = self._control_topic_for_device(device)
                 self.client.publish(
                     control_topic,
                     f"showsetting-{token_value}",
@@ -729,8 +709,11 @@ class MQTTService:
                     retain=False,
                 )
 
-    def _apply_blocklist_update(self, token_value: str, pending: set[str], cached: dict) -> None:
+    def _apply_blocklist_update(self, device: Device, pending: set[str], cached: dict) -> None:
         if not self.client:
+            return
+        token_value = device.token.token if device.token else None
+        if not token_value:
             return
         blocked = cached.get("blocked_ips") or cached.get("BLOCKED_IPS") or []
         if isinstance(blocked, str):
@@ -743,28 +726,43 @@ class MQTTService:
         payload = dict(cached) if isinstance(cached, dict) else {}
         payload["token"] = token_value
         payload["blocked_ips"] = merged
-        self.latest_settings[token_value] = dict(payload)
+        self.latest_settings[device.id] = dict(payload)
         try:
-            control_topic = self._control_topic_for_token(token_value)
+            control_topic = self._control_topic_for_device(device)
             self.client.publish(control_topic, json.dumps(payload), qos=0, retain=False)
         except Exception as exc:  # noqa: BLE001
             if self.app:
                 self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
 
-    def _control_topic_for_token(self, token_value: str) -> str:
-        code = self.session_codes.get(token_value)
+    def _store_session_code(self, device: Device, code: str) -> None:
+        for key in (device.mac_address, device.esp_id):
+            if not key:
+                continue
+            self.session_codes[str(key).lower()] = code
+
+    def _session_code_for_device(self, device: Device) -> str | None:
+        for key in (device.mac_address, device.esp_id):
+            if not key:
+                continue
+            code = self.session_codes.get(str(key).lower())
+            if code:
+                return code
+        return None
+
+    def _control_topic_for_device(self, device: Device) -> str:
+        code = self._session_code_for_device(device)
         if code:
             return f"esp/setting/Control-{code}"
         return "esp/setting/Control"
 
-    def _alive_topic_for_token(self, token_value: str) -> str:
-        code = self.session_codes.get(token_value)
+    def _alive_topic_for_device(self, device: Device) -> str:
+        code = self._session_code_for_device(device)
         if code:
             return f"esp/Alive/Check-{code}"
         return "esp/Alive/Check"
 
-    def _alive_setting_topic_for_token(self, token_value: str) -> str:
-        code = self.session_codes.get(token_value)
+    def _alive_setting_topic_for_device(self, device: Device) -> str:
+        code = self._session_code_for_device(device)
         if code:
             return f"esp/alive/setting-{code}"
         return "esp/alive/setting"

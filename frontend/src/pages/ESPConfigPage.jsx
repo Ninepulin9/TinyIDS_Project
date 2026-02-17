@@ -95,12 +95,16 @@ const ESPConfigPage = () => {
     if (!mac && !token) return null
     return (
       list.find((device) => {
-      const deviceMac = String(device?.mac_address ?? device?.esp_id ?? '').trim().toLowerCase()
-      const deviceToken = String(device?.token ?? '').trim().toLowerCase()
-      if (mac && deviceMac && deviceMac === mac) return true
-      if (token && deviceToken && deviceToken === token) return true
-      return false
-    }) ?? null
+        const deviceMac = String(device?.mac_address ?? device?.esp_id ?? '').trim().toLowerCase()
+        const deviceToken = String(device?.token ?? '').trim().toLowerCase()
+        if (mac) {
+          return deviceMac && deviceMac === mac
+        }
+        if (token) {
+          return deviceToken && deviceToken === token
+        }
+        return false
+      }) ?? null
     )
   }, [])
 

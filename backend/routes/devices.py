@@ -286,11 +286,11 @@ def publish_to_device(device_id: int):
         topic = f"{topic_base}-{token_value}"
     else:
         if token_value and topic_base.lower() == "esp/setting/control":
-            topic = mqtt_service._control_topic_for_token(token_value)
+            topic = mqtt_service._control_topic_for_device(device)
         elif token_value and topic_base.lower() == "esp/alive/check":
-            topic = mqtt_service._alive_topic_for_token(token_value)
+            topic = mqtt_service._alive_topic_for_device(device)
         elif token_value and topic_base.lower() == "esp/alive/setting":
-            topic = mqtt_service._alive_setting_topic_for_token(token_value)
+            topic = mqtt_service._alive_setting_topic_for_device(device)
         else:
             topic = topic_base
 
@@ -349,7 +349,7 @@ def latest_settings(device_id: int):
     token_value = device.token.token if device.token else None
     if not token_value:
         return jsonify({"message": "token not set for this device"}), HTTPStatus.BAD_REQUEST
-    payload = mqtt_service.latest_settings.get(token_value)
+    payload = mqtt_service.latest_settings.get(device.id)
     if not payload:
         return jsonify({"message": "settings not available yet"}), HTTPStatus.NOT_FOUND
     return jsonify(payload)
