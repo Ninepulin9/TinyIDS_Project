@@ -306,6 +306,19 @@ class MQTTService:
                 self.app.logger.warning("No user found; skipping registration for %s", mac_address)
             return None
         mac_value = mac_address.strip()
+        existing_token = DeviceToken.query.filter_by(token=token).first()
+        if existing_token and existing_token.device_id:
+            existing_device = Device.query.filter_by(id=existing_token.device_id).first()
+            if existing_device and existing_device.mac_address:
+                if existing_device.mac_address.lower() != mac_value.lower():
+                    if self.app:
+                        self.app.logger.warning(
+                            "Registration rejected: token %s already used by %s (payload mac %s)",
+                            token,
+                            existing_device.mac_address,
+                            mac_value,
+                        )
+                    return None
         device = Device.query.filter_by(esp_id=mac_value).first()
         if not device:
             device = (
@@ -476,46 +489,62 @@ class MQTTService:
         owner = User.query.first()
         owner_id = owner.id if owner else 1
 
+        mac_value = self._coerce_str(
+            payload.get("mac_address") or payload.get("mac") or payload.get("macAddress")
+        )
+
+        def _mac_matches(device: Device | None) -> bool:
+            if not device:
+                return False
+            if not mac_value or not device.mac_address:
+                return True
+            return device.mac_address.lower() == mac_value.lower()
+
         token_value = self._coerce_str(payload.get("token"))
         if token_value:
             token_row = DeviceToken.query.filter_by(token=token_value).first()
             if token_row:
-                return token_row.device
+                if _mac_matches(token_row.device):
+                    return token_row.device
+                if self.app:
+                    self.app.logger.warning(
+                        "Token match but MAC mismatch for token %s (payload %s != device %s)",
+                        token_value,
+                        mac_value,
+                        token_row.device.mac_address,
+                    )
 
         esp_id = self._coerce_str(payload.get("esp_id") or payload.get("espId") or payload.get("espID"))
         if esp_id:
             device = Device.query.filter_by(esp_id=esp_id).first()
-            if device:
+            if device and _mac_matches(device):
                 return device
 
         device_id_value = payload.get("device_id") or payload.get("deviceId")
         device_id = self._coerce_int(device_id_value)
         if device_id is not None:
             device = Device.query.filter_by(id=device_id, user_id=owner_id).first()
-            if device:
+            if device and _mac_matches(device):
                 return device
 
         if device_id_value is not None and not esp_id:
             esp_candidate = self._coerce_str(device_id_value)
             if esp_candidate:
                 device = Device.query.filter_by(esp_id=esp_candidate).first()
-                if device:
+                if device and _mac_matches(device):
                     return device
 
-        mac_address = self._coerce_str(
-            payload.get("mac_address") or payload.get("mac") or payload.get("macAddress")
-        )
-        if mac_address:
+        if mac_value:
             device = (
                 Device.query.filter(Device.user_id == owner_id)
-                .filter(func.lower(Device.mac_address) == mac_address.lower())
+                .filter(func.lower(Device.mac_address) == mac_value.lower())
                 .first()
             )
             if device:
                 return device
 
         ip_address = self._coerce_str(payload.get("ip_address") or payload.get("ip") or payload.get("device_ip"))
-        if ip_address:
+        if ip_address and not mac_value:
             device = (
                 Device.query.filter(Device.user_id == owner_id)
                 .filter(Device.ip_address == ip_address)
@@ -531,7 +560,7 @@ class MQTTService:
                 .filter(func.lower(Device.name) == device_name.lower())
                 .first()
             )
-            if device:
+            if device and _mac_matches(device):
                 return device
         return None
 
