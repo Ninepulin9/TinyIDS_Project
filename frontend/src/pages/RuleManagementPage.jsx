@@ -166,7 +166,9 @@ const RuleManagementPage = () => {
   const lastSettingsRequestRef = useRef({ token: '', time: 0 })
   const pingIntervalRef = useRef(null)
   const initialPingRef = useRef(false)
-  const requestThrottleMs = 5000
+  const requestThrottleMs = 15000
+  const pollIntervalMs = 3000
+  const maxPollAttempts = 8
   const [expanded, setExpanded] = useState(() =>
     ruleSections.reduce((acc, section, idx) => ({ ...acc, [section.id]: idx === 0 }), {})
   )
@@ -442,11 +444,18 @@ const RuleManagementPage = () => {
       stopPolling()
       pollRef.current.timer = setInterval(async () => {
         pollRef.current.attempts += 1
+        if (pollRef.current.attempts >= maxPollAttempts) {
+          stopPolling()
+          setAwaitingToken('')
+          setLoadingRules(false)
+          toast.error('Device did not respond in time.')
+          return
+        }
         const done = await pollSettingsOnce(deviceToken, targetDevice.id)
         if (done) {
           stopPolling()
         }
-      }, 1000)
+      }, pollIntervalMs)
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request settings'
       toast.error(message)
@@ -513,29 +522,29 @@ const RuleManagementPage = () => {
         message: `showsetting-default-${deviceToken}`,
         append_token: false,
       })
-      // Ask for the full settings payload after default reset
-      await api.post(`/api/devices/${selectedDevice.id}/publish`, {
-        topic_base: 'esp/setting/Control',
-        message: `showsetting-${deviceToken}`,
-        append_token: false,
-      })
+      // Ask for the full settings payload after default reset (delayed)
+      setAwaitingToken(deviceToken)
+      stopPolling()
       setTimeout(() => {
         api.post(`/api/devices/${selectedDevice.id}/publish`, {
           topic_base: 'esp/setting/Control',
           message: `showsetting-${deviceToken}`,
           append_token: false,
         })
-      }, 700)
-      setAwaitingToken(deviceToken)
-      stopPolling()
-      setTimeout(() => {
         pollRef.current.timer = setInterval(async () => {
           pollRef.current.attempts += 1
+          if (pollRef.current.attempts >= maxPollAttempts) {
+            stopPolling()
+            setAwaitingToken('')
+            setLoadingRules(false)
+            toast.error('Device did not respond in time.')
+            return
+          }
           const done = await pollSettingsOnce(deviceToken, selectedDevice.id)
           if (done) {
             stopPolling()
           }
-        }, 1000)
+        }, pollIntervalMs)
       }, 5000)
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request defaults'
