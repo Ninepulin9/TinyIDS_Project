@@ -657,7 +657,7 @@ const RuleManagementPage = () => {
                 <tr className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-3">Device Name</th>
                   <th className="px-4 py-3">Online Status</th>
-                  <th className="px-4 py-3">IP Address</th>
+                  <th className="px-4 py-3">IP Address / MAC Address</th>
                   <th className="px-4 py-3 text-right">Setting</th>
                 </tr>
               </thead>
@@ -668,7 +668,19 @@ const RuleManagementPage = () => {
                       {device.device_name ?? device.name ?? `Device ${device.id}`}
                     </td>
                     <td className="px-4 py-3">{renderOnlineStatus(device)}</td>
-                    <td className="px-4 py-3 text-slate-600">{device.ip_address ?? '--'}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      <div className="font-mono text-sm font-semibold text-slate-800">
+                        {device.ip_address ?? '--'}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-xs">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          MAC
+                        </span>
+                        <span className="font-mono font-semibold text-slate-700">
+                          {device.mac_address ?? '--'}
+                        </span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
