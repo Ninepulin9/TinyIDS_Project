@@ -476,55 +476,64 @@ class MQTTService:
         owner = User.query.first()
         owner_id = owner.id if owner else 1
 
-        device = None
-
         token_value = self._coerce_str(payload.get("token"))
         if token_value:
             token_row = DeviceToken.query.filter_by(token=token_value).first()
             if token_row:
-                device = token_row.device
+                return token_row.device
 
         esp_id = self._coerce_str(payload.get("esp_id") or payload.get("espId") or payload.get("espID"))
         if esp_id:
             device = Device.query.filter_by(esp_id=esp_id).first()
+            if device:
+                return device
 
         device_id_value = payload.get("device_id") or payload.get("deviceId")
-        if not device:
-            device_id = self._coerce_int(device_id_value)
-            if device_id is not None:
-                device = Device.query.filter_by(id=device_id, user_id=owner_id).first()
+        device_id = self._coerce_int(device_id_value)
+        if device_id is not None:
+            device = Device.query.filter_by(id=device_id, user_id=owner_id).first()
+            if device:
+                return device
 
-        if not device and device_id_value is not None and not esp_id:
+        if device_id_value is not None and not esp_id:
             esp_candidate = self._coerce_str(device_id_value)
             if esp_candidate:
                 device = Device.query.filter_by(esp_id=esp_candidate).first()
+                if device:
+                    return device
 
         mac_address = self._coerce_str(
             payload.get("mac_address") or payload.get("mac") or payload.get("macAddress")
         )
-        if not device and mac_address:
+        if mac_address:
             device = (
                 Device.query.filter(Device.user_id == owner_id)
                 .filter(func.lower(Device.mac_address) == mac_address.lower())
                 .first()
             )
+            if device:
+                return device
 
         ip_address = self._coerce_str(payload.get("ip_address") or payload.get("ip") or payload.get("device_ip"))
-        if not device and ip_address:
+        if ip_address:
             device = (
                 Device.query.filter(Device.user_id == owner_id)
                 .filter(Device.ip_address == ip_address)
                 .first()
             )
+            if device:
+                return device
 
         device_name = self._coerce_str(payload.get("device_name") or payload.get("deviceName") or payload.get("device"))
-        if not device and device_name:
+        if device_name:
             device = (
                 Device.query.filter(Device.user_id == owner_id)
                 .filter(func.lower(Device.name) == device_name.lower())
                 .first()
             )
-        return device
+            if device:
+                return device
+        return None
 
     def _touch_device(self, device: Device, payload: dict, mark_active: bool | None) -> None:
         ip_address = self._coerce_str(payload.get("ip_address") or payload.get("ip") or payload.get("device_ip"))

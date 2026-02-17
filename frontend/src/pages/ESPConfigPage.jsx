@@ -33,6 +33,7 @@ const ESPConfigPage = () => {
   const lastAlivePingRef = useRef(0)
   const registrationPollRef = useRef({ timer: null, attempts: 0 })
   const pendingRegistrationRef = useRef({ mac: '', token: '' })
+  const ipRefreshRef = useRef(0)
   const location = useLocation()
 
   const dedupeDevices = (list) => {
@@ -87,18 +88,20 @@ const ESPConfigPage = () => {
     registrationPollRef.current.attempts = 0
   }, [])
 
-  const matchesPendingRegistration = useCallback((list) => {
+  const findPendingRegistration = useCallback((list) => {
     const pending = pendingRegistrationRef.current
     const mac = String(pending.mac ?? '').trim().toLowerCase()
     const token = String(pending.token ?? '').trim().toLowerCase()
-    if (!mac && !token) return false
-    return list.some((device) => {
+    if (!mac && !token) return null
+    return (
+      list.find((device) => {
       const deviceMac = String(device?.mac_address ?? device?.esp_id ?? '').trim().toLowerCase()
       const deviceToken = String(device?.token ?? '').trim().toLowerCase()
       if (mac && deviceMac && deviceMac === mac) return true
       if (token && deviceToken && deviceToken === token) return true
       return false
-    })
+    }) ?? null
+    )
   }, [])
 
   const fetchDevices = useCallback(async ({ silent = false } = {}) => {
@@ -112,10 +115,25 @@ const ESPConfigPage = () => {
       const deduped = dedupeDevices(fetchedDevices)
       setDevices(deduped)
       sendAliveCheck(deduped)
-      if (matchesPendingRegistration(deduped)) {
-        pendingRegistrationRef.current = { mac: '', token: '' }
-        clearRegistrationPoll()
-        toast.success('Device registered')
+      const pendingDevice = findPendingRegistration(deduped)
+      if (pendingDevice) {
+        const hasIp = Boolean(pendingDevice.ip_address)
+        const hasMac = Boolean(pendingDevice.mac_address)
+        if (hasIp || hasMac) {
+          pendingRegistrationRef.current = { mac: '', token: '' }
+          clearRegistrationPoll()
+          toast.success('Device registered')
+        }
+      }
+      const needsIpRefresh = deduped.some((device) => device?.token && (!device.ip_address || !device.mac_address))
+      if (needsIpRefresh) {
+        const now = Date.now()
+        if (now - ipRefreshRef.current > 5000) {
+          ipRefreshRef.current = now
+          setTimeout(() => {
+            fetchDevices({ silent: true })
+          }, 3000)
+        }
       }
     } catch (err) {
       const message =
@@ -131,7 +149,7 @@ const ESPConfigPage = () => {
         setLoading(false)
       }
     }
-  }, [clearRegistrationPoll, matchesPendingRegistration, sendAliveCheck])
+  }, [clearRegistrationPoll, findPendingRegistration, sendAliveCheck])
 
   const startRegistrationPoll = useCallback(() => {
     clearRegistrationPoll()
