@@ -10,12 +10,6 @@ import { getSocket } from '../lib/socket'
 
 dayjs.extend(relativeTime)
 
-const severityStyles = {
-  Low: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
-  Medium: 'bg-amber-100 text-amber-700 ring-amber-200',
-  High: 'bg-rose-100 text-rose-700 ring-rose-200',
-}
-
 const statusStyles = {
   blocked: 'bg-rose-100 text-rose-700 ring-rose-200',
   allowed: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
