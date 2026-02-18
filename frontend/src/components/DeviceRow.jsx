@@ -74,9 +74,18 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               IP
             </span>
-            <span className="font-mono text-sm font-semibold text-slate-800">
-              {device.ip_address ?? '--'}
-            </span>
+            {device.ip_address ? (
+              <span className="font-mono text-sm font-semibold text-slate-800">
+                {device.ip_address}
+              </span>
+            ) : device.mac_address ? (
+              <span className="inline-flex items-center gap-2 text-xs text-slate-400">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-slate-300" />
+                Loading...
+              </span>
+            ) : (
+              <span className="font-mono text-sm font-semibold text-slate-500">--</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">

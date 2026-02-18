@@ -440,7 +440,7 @@ const LogsPage = () => {
     isMountedRef.current = true
     fetchLatest({ silent: false })
     fetchDevices()
-    pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 15000)
+    pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 5000)
     return () => {
       isMountedRef.current = false
       if (pollIntervalRef.current) {
@@ -501,13 +501,18 @@ const LogsPage = () => {
       }
     }
 
+    const handleConnect = () => {
+      fetchLatest({ silent: true }).catch(() => {})
+    }
+    socket.on('connect', handleConnect)
     socket.on('log:new', handleLogNew)
     socket.on('device:registered', fetchDevices)
     return () => {
+      socket.off('connect', handleConnect)
       socket.off('log:new', handleLogNew)
       socket.off('device:registered', fetchDevices)
     }
-  }, [fetchDevices, tokenIdMap])
+  }, [fetchDevices, fetchLatest, tokenIdMap])
 
   useEffect(() => {
     if (!deviceList.length) return
