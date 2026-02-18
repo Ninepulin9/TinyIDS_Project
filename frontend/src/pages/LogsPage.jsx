@@ -288,8 +288,8 @@ const LogsPage = () => {
   )
 
   const requestSettingsForDevices = useCallback(
-    async (list = deviceList) => {
-      if (!list.length) return
+    async (list = deviceList, forceRequest = false) => {
+      if (!list.length || !forceRequest) return
       const now = Date.now()
       if (now - settingsRequestRef.current.time < 5000) return
       settingsRequestRef.current.time = now
@@ -309,14 +309,18 @@ const LogsPage = () => {
   )
 
   const refreshBlockedStatus = useCallback(
-    async (list = deviceList) => {
+    async (list = deviceList, forceRequest = false) => {
       if (!list.length) return
       setBlockStatusLoading(true)
-      await requestSettingsForDevices(list)
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await requestSettingsForDevices(list, forceRequest)
+      if (forceRequest) {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+      }
       await loadBlockedFromSettings(list)
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      await loadBlockedFromSettings(list)
+      if (forceRequest) {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        await loadBlockedFromSettings(list)
+      }
       if (isMountedRef.current) {
         setBlockStatusLoading(false)
       }
@@ -362,7 +366,7 @@ const LogsPage = () => {
             return next
           })
         }
-        await refreshBlockedStatus()
+        await refreshBlockedStatus(deviceList, true)
       } catch (err) {
         const message =
           err?.response?.data?.message ?? err?.message ?? `Failed to block ${ipValue}`
@@ -375,7 +379,7 @@ const LogsPage = () => {
         })
       }
     },
-    [refreshBlockedStatus, tokenIdMap],
+    [deviceList, refreshBlockedStatus, tokenIdMap],
   )
 
   const fetchLatest = useCallback(
@@ -507,8 +511,8 @@ const LogsPage = () => {
 
   useEffect(() => {
     if (!deviceList.length) return
-    refreshBlockedStatus(deviceList).catch(() => {})
-  }, [deviceList, refreshBlockedStatus])
+    loadBlockedFromSettings(deviceList).catch(() => {})
+  }, [deviceList, loadBlockedFromSettings])
 
   const resolveBlockedSet = useCallback(
     (logDeviceId) => {

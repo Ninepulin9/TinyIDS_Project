@@ -96,7 +96,7 @@ const BlacklistPage = () => {
     return Date.now() - parsed.getTime() <= maxAgeMs
   }
 
-  const loadBlacklist = useCallback(async () => {
+  const loadBlacklist = useCallback(async ({ forceRequest = false } = {}) => {
     setLoading(true)
     try {
       if (retryRef.current.timer) {
@@ -113,7 +113,8 @@ const BlacklistPage = () => {
       let mergedEntries = []
       if (tokenDevices.length) {
         const now = Date.now()
-        const shouldRequest = now - lastRequestRef.current.time >= requestThrottleMs
+        const shouldRequest =
+          forceRequest && now - lastRequestRef.current.time >= requestThrottleMs
         if (shouldRequest) {
           lastRequestRef.current.time = now
         }
@@ -321,7 +322,7 @@ const BlacklistPage = () => {
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await loadBlacklist()
+      await loadBlacklist({ forceRequest: true })
     } finally {
       setRefreshing(false)
     }

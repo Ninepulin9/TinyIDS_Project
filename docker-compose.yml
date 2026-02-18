@@ -19,7 +19,7 @@ services:
       - MQTT_TLS_INSECURE=false
       - MQTT_DISCOVERY_INTERVAL=0
       - MQTT_AUTO_DISCOVERY=false
-      - MQTT_SETTINGS_POLL_INTERVAL=10
+      - MQTT_SETTINGS_POLL_INTERVAL=0
       - ALLOWED_ORIGIN=*
       - CORS_ORIGINS=*
     ports:
