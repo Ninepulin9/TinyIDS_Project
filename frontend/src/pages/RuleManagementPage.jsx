@@ -606,17 +606,59 @@ const RuleManagementPage = () => {
 
   const renderField = (field) => {
     const inputType = field.type === 'number' ? 'number' : 'text'
+    const listFieldKeys = new Set([
+      'g_trusted_channel',
+      'g_target_trusted_mac',
+      'g_mqtt_whitelist',
+      'blocked_ips',
+      'xss_patterns',
+    ])
+    const isListField = listFieldKeys.has(field.key)
+    const listItems = isListField
+      ? String(ruleValues[field.key] ?? '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : []
+    const inputClassName =
+      'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
     return (
       <div key={field.key} className={field.fullWidth ? 'sm:col-span-2' : ''}>
         <label className="text-sm font-semibold text-slate-700">{field.label}</label>
         <p className="text-xs text-slate-500">{field.helper}</p>
-        <input
-          type={inputType}
-          value={ruleValues[field.key]}
-          onChange={(e) => handleChange(field.key, e.target.value)}
-          className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-          placeholder={field.placeholder}
-        />
+        {isListField ? (
+          <textarea
+            rows={field.key === 'xss_patterns' ? 3 : 2}
+            value={ruleValues[field.key]}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            className={`${inputClassName} resize-y`}
+            placeholder={field.placeholder}
+          />
+        ) : (
+          <input
+            type={inputType}
+            value={ruleValues[field.key]}
+            onChange={(e) => handleChange(field.key, e.target.value)}
+            className={inputClassName}
+            placeholder={field.placeholder}
+          />
+        )}
+        {isListField && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {listItems.length ? (
+              listItems.map((item) => (
+                <span
+                  key={`${field.key}-${item}`}
+                  className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600"
+                >
+                  {item}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-slate-400">No items</span>
+            )}
+          </div>
+        )}
         {ruleErrors[field.key] && <p className="mt-1 text-xs text-rose-500">{ruleErrors[field.key]}</p>}
       </div>
     )
