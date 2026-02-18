@@ -643,22 +643,6 @@ const RuleManagementPage = () => {
             placeholder={field.placeholder}
           />
         )}
-        {isListField && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {listItems.length ? (
-              listItems.map((item) => (
-                <span
-                  key={`${field.key}-${item}`}
-                  className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600"
-                >
-                  {item}
-                </span>
-              ))
-            ) : (
-              <span className="text-xs text-slate-400">No items</span>
-            )}
-          </div>
-        )}
         {ruleErrors[field.key] && <p className="mt-1 text-xs text-rose-500">{ruleErrors[field.key]}</p>}
       </div>
     )
