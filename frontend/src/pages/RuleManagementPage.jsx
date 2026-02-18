@@ -408,6 +408,9 @@ const RuleManagementPage = () => {
         append_token: false,
       })
       toast.success('Settings sent to device')
+      setTimeout(() => {
+        handleLoadFromDevice(selectedDevice, { force: true })
+      }, 1000)
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to send settings'
       toast.error(message)
@@ -416,7 +419,8 @@ const RuleManagementPage = () => {
     }
   }
 
-  const handleLoadFromDevice = async (deviceOverride) => {
+  const handleLoadFromDevice = async (deviceOverride, options = {}) => {
+    const { force = false } = options
     const targetDevice = deviceOverride ?? selectedDevice
     if (!targetDevice) return
     const deviceToken = (deviceOverride?.token ?? ruleValues.token)?.trim() || targetDevice.token
@@ -426,6 +430,7 @@ const RuleManagementPage = () => {
     }
     const now = Date.now()
     if (
+      !force &&
       lastSettingsRequestRef.current.token === deviceToken &&
       now - lastSettingsRequestRef.current.time < requestThrottleMs
     ) {

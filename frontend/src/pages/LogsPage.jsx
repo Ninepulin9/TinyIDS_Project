@@ -539,6 +539,7 @@ const LogsPage = () => {
       const withinWindow = ts.isValid() ? ts.isAfter(cutoff) : true
       if (!withinWindow) return false
       const typeLabel = String(log.type ?? '').trim().toLowerCase()
+      if (typeLabel === 'unknown') return false
       if (typeLabel === 'esp settings') return false
       if (shouldHideUnknownLog(log, tokenNameMap)) return false
       if (!devicesLoaded || (tokenDeviceIds.size === 0 && tokenValues.size === 0)) return true
