@@ -8,7 +8,7 @@ const statusVariant = (status) => {
   return status.toLowerCase() === 'connected' || status.toLowerCase() === 'online' ? 'success' : 'danger'
 }
 
-const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActive, onDelete, onReregister, onRename, toggling = false }) => {
+const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActive, onDelete, onRename, toggling = false }) => {
   const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
   const pendingWindowSec = 30
   const requestMoment = aliveCheckAt ? dayjs(aliveCheckAt) : null
@@ -24,10 +24,6 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
   const handleDelete = () => {
     onDelete?.(device)
   }
-  const handleReregister = () => {
-    onReregister?.(device)
-  }
-
   return (
     <tr className="border-b border-slate-100 last:border-none hover:bg-slate-50/70 transition">
       <td className="px-4 py-4 align-middle text-sm font-semibold text-slate-900">
@@ -113,13 +109,6 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
       </td>
       <td className="px-4 py-4 align-middle">
         <div className="flex items-center justify-center gap-2 whitespace-nowrap">
-          <button
-            type="button"
-            className="rounded-full border border-sky-500 bg-white px-4 py-2 text-xs font-semibold text-sky-600 transition hover:bg-sky-50 hover:text-sky-700"
-            onClick={handleReregister}
-          >
-            Re-register
-          </button>
           <button
             type="button"
             className="rounded-full border border-rose-500 bg-white px-4 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"

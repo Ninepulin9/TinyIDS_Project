@@ -23,7 +23,6 @@ const ESPConfigPage = () => {
   const [registering, setRegistering] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [reregisterTarget, setReregisterTarget] = useState(null)
   const [renameTarget, setRenameTarget] = useState(null)
   const [renameValue, setRenameValue] = useState('')
   const [aliveCheckAt, setAliveCheckAt] = useState(null)
@@ -336,11 +335,6 @@ const ESPConfigPage = () => {
     }
   }
 
-  const handleReregisterDevice = async (device) => {
-    if (!device?.id) return
-    setReregisterTarget(device)
-  }
-
   const handleRenameDevice = async (device) => {
     if (!device?.id) return
     setRenameTarget(device)
@@ -368,23 +362,6 @@ const ESPConfigPage = () => {
     } finally {
       setRenameTarget(null)
       setRenameValue('')
-    }
-  }
-
-  const confirmReregisterDevice = async () => {
-    const device = reregisterTarget
-    if (!device?.id) return
-    try {
-      await api.post(`/api/devices/${device.id}/reregister`)
-      toast.success('Device marked for re-registration')
-    } catch (err) {
-      const message =
-        err?.response?.data?.message ??
-        err?.message ??
-        'Unable to re-register device. Please try again.'
-      toast.error(message)
-    } finally {
-      setReregisterTarget(null)
     }
   }
 
@@ -448,7 +425,6 @@ const ESPConfigPage = () => {
           onEditMqtt={setSelectedMqttDevice}
           onToggleActive={handleToggleActive}
           onDelete={handleDeleteDevice}
-          onReregister={handleReregisterDevice}
           onRename={handleRenameDevice}
           togglingId={togglingId}
           aliveCheckAt={aliveCheckAt}
@@ -535,35 +511,6 @@ const ESPConfigPage = () => {
                 className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
               >
                 Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {reregisterTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-slate-900">Re-register device?</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              This will reset token for{' '}
-              <span className="font-semibold">{reregisterTarget.device_name ?? reregisterTarget.name ?? reregisterTarget.id}</span>
-              .
-            </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setReregisterTarget(null)}
-                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmReregisterDevice}
-                className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
-              >
-                Yes, re-register
               </button>
             </div>
           </div>
