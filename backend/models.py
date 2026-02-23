@@ -20,6 +20,8 @@ class User(db.Model, TimestampMixin):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    failed_login_attempts = db.Column(db.Integer, default=0, nullable=False)
+    lockout_until = db.Column(db.DateTime)
 
     devices = db.relationship("Device", backref="user", cascade="all, delete-orphan")
     rules = db.relationship("Rule", backref="user", cascade="all, delete-orphan")

@@ -113,8 +113,7 @@ const BlacklistPage = () => {
       let mergedEntries = []
       if (tokenDevices.length) {
         const now = Date.now()
-        const shouldRequest =
-          forceRequest && now - lastRequestRef.current.time >= requestThrottleMs
+        const shouldRequest = forceRequest
         if (shouldRequest) {
           lastRequestRef.current.time = now
         }
