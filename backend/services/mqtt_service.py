@@ -3,12 +3,12 @@ import re
 import secrets
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 import paho.mqtt.client as mqtt
-from sqlalchemy import func
+from sqlalchemy import delete, func
 
 from extensions import db, socketio
 from models import Blacklist, Device, DeviceNetworkProfile, DeviceToken, Log, SystemSettings, User
@@ -26,12 +26,15 @@ class MQTTService:
         self.discovery_interval = 0
         self.auto_discovery_enabled = False
         self.settings_poll_interval = 0
+        self.device_prune_hours = 24
+        self.device_prune_interval = 3600
         self.allow_reregister = True
         self.reregister_once: set[str] = set()
         self.pending_registrations: dict[str, dict] = {}
         self.registration_lock = threading.Lock()
         self.discovery_thread_started = False
         self.settings_poll_thread_started = False
+        self.device_cleanup_thread_started = False
         self.latest_settings: dict[int, dict] = {}
         self.pending_blocks: dict[int, set[str]] = {}
         self.session_codes: dict[str, str] = {}
@@ -58,6 +61,8 @@ class MQTTService:
         self.client.on_message = self._on_message
         self.discovery_interval = int(app.config.get("MQTT_DISCOVERY_INTERVAL", 0) or 0)
         self.settings_poll_interval = int(app.config.get("MQTT_SETTINGS_POLL_INTERVAL", 0) or 0)
+        self.device_prune_hours = int(app.config.get("DEVICE_PRUNE_HOURS", 24) or 24)
+        self.device_prune_interval = int(app.config.get("DEVICE_PRUNE_INTERVAL", 3600) or 3600)
         self.allow_reregister = bool(app.config.get("MQTT_ALLOW_REREGISTER", True))
         self.auto_discovery_enabled = bool(app.config.get("MQTT_AUTO_DISCOVERY", False))
         self.topics = self._resolve_topics()
@@ -81,6 +86,7 @@ class MQTTService:
         threading.Thread(target=_runner, daemon=True).start()
         self._start_discovery_loop()
         self._start_settings_poll()
+        self._start_device_cleanup()
 
     def _resolve_topics(self) -> list[str]:
         raw_topics = self.app.config.get("MQTT_TOPICS") if self.app else None
@@ -415,6 +421,45 @@ class MQTTService:
                     if self.app:
                         self.app.logger.exception("Settings poll error: %s", exc)
                 time.sleep(self.settings_poll_interval)
+
+        threading.Thread(target=_loop, daemon=True).start()
+
+    def _start_device_cleanup(self) -> None:
+        if self.device_cleanup_thread_started or self.device_prune_hours <= 0:
+            return
+        self.device_cleanup_thread_started = True
+
+        def _loop():
+            while True:
+                try:
+                    with self.app.app_context():
+                        cutoff = datetime.utcnow() - timedelta(hours=self.device_prune_hours)
+                        stale_ids = [
+                            row[0]
+                            for row in DeviceNetworkProfile.query.with_entities(
+                                DeviceNetworkProfile.device_id
+                            )
+                            .filter(DeviceNetworkProfile.last_seen.isnot(None))
+                            .filter(DeviceNetworkProfile.last_seen < cutoff)
+                            .all()
+                        ]
+                        if stale_ids:
+                            for device_id in stale_ids:
+                                db.session.execute(delete(Log).where(Log.device_id == device_id))
+                                db.session.execute(
+                                    delete(DeviceToken).where(DeviceToken.device_id == device_id)
+                                )
+                                db.session.execute(
+                                    delete(DeviceNetworkProfile).where(
+                                        DeviceNetworkProfile.device_id == device_id
+                                    )
+                                )
+                                db.session.execute(delete(Device).where(Device.id == device_id))
+                            db.session.commit()
+                except Exception as exc:  # noqa: BLE001
+                    if self.app:
+                        self.app.logger.exception("Device cleanup error: %s", exc)
+                time.sleep(self.device_prune_interval)
 
         threading.Thread(target=_loop, daemon=True).start()
 
