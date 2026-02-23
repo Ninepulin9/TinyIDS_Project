@@ -207,6 +207,7 @@ const LogsPage = () => {
   })
   const [blacklistIps, setBlacklistIps] = useState(new Set())
   const [blacklistLoading, setBlacklistLoading] = useState(true)
+  const [autoBlockEnabled, setAutoBlockEnabled] = useState(null)
   const [blockSubmitting, setBlockSubmitting] = useState(new Set())
   const [page, setPage] = useState(1)
   const [sortDesc, setSortDesc] = useState(true)
@@ -214,6 +215,8 @@ const LogsPage = () => {
   const isMountedRef = useRef(false)
   const pollIntervalRef = useRef(null)
   const blacklistRequestRef = useRef(0)
+  const pendingBlockRef = useRef(new Map())
+  const pendingBlockTtlMs = 60000
 
   const dedupeDevices = useCallback((list) => {
     const byKey = new Map()
@@ -240,6 +243,20 @@ const LogsPage = () => {
 
   const isValidIp = (value) => /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(value).trim())
 
+  const mergeWithPendingBlocks = useCallback((baseSet) => {
+    const next = new Set(baseSet)
+    const now = Date.now()
+    const pending = pendingBlockRef.current
+    pending.forEach((timestamp, ip) => {
+      if (now - timestamp <= pendingBlockTtlMs) {
+        next.add(ip)
+      } else {
+        pending.delete(ip)
+      }
+    })
+    return next
+  }, [])
+
   const fetchBlacklistIps = useCallback(
     async ({ force = false } = {}) => {
       const now = Date.now()
@@ -255,7 +272,7 @@ const LogsPage = () => {
           if (!ip) return
           next.add(ip)
         })
-        setBlacklistIps(next)
+        setBlacklistIps(mergeWithPendingBlocks(next))
       } catch {
         // ignore
       } finally {
@@ -264,7 +281,7 @@ const LogsPage = () => {
         }
       }
     },
-    [blacklistIps.size, blacklistLoading],
+    [blacklistIps.size, blacklistLoading, mergeWithPendingBlocks],
   )
 
   const handleBlock = useCallback(
@@ -294,6 +311,7 @@ const LogsPage = () => {
           token: tokenValue || undefined,
         })
         toast.success(`Blocked ${ipValue}`)
+        pendingBlockRef.current.set(ipKey, Date.now())
         setBlacklistIps((prev) => {
           const next = new Set(prev)
           next.add(ipKey)
@@ -373,6 +391,15 @@ const LogsPage = () => {
     isMountedRef.current = true
     fetchLatest({ silent: false })
     fetchDevices()
+    api
+      .get('/api/settings/system')
+      .then(({ data }) => {
+        if (!isMountedRef.current) return
+        if (typeof data?.auto_block_enabled === 'boolean') {
+          setAutoBlockEnabled(data.auto_block_enabled)
+        }
+      })
+      .catch(() => {})
     pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 5000)
     return () => {
       isMountedRef.current = false
@@ -416,7 +443,19 @@ const LogsPage = () => {
       setLogs((prev) => mergeLogs([normalized], prev))
       fetchLatest({ silent: true }).catch(() => {})
       const topic = String(normalized?.payload?._mqtt_topic ?? '').toLowerCase()
-      if (topic === 'esp/setting/now' || topic === 'esp/alert') {
+      if (topic === 'esp/setting/now') {
+        fetchBlacklistIps()
+      }
+      if (topic === 'esp/alert') {
+        const source = String(normalized?.source_ip ?? '').trim().toLowerCase()
+        if (autoBlockEnabled && source && isValidIp(source)) {
+          pendingBlockRef.current.set(source, Date.now())
+          setBlacklistIps((prev) => {
+            const next = new Set(prev)
+            next.add(source)
+            return next
+          })
+        }
         fetchBlacklistIps()
       }
     }
@@ -432,7 +471,7 @@ const LogsPage = () => {
       socket.off('log:new', handleLogNew)
       socket.off('device:registered', fetchDevices)
     }
-  }, [fetchBlacklistIps, fetchDevices, fetchLatest])
+  }, [autoBlockEnabled, fetchBlacklistIps, fetchDevices, fetchLatest])
 
   useEffect(() => {
     fetchBlacklistIps({ force: true })
