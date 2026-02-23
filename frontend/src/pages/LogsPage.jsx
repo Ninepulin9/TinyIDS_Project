@@ -214,6 +214,8 @@ const LogsPage = () => {
   const isMountedRef = useRef(false)
   const pollIntervalRef = useRef(null)
   const settingsRequestRef = useRef({ time: 0 })
+  const pendingBlockRef = useRef(new Map())
+  const pendingBlockTtlMs = 60000
 
   const dedupeDevices = useCallback((list) => {
     const byKey = new Map()
@@ -251,6 +253,24 @@ const LogsPage = () => {
 
   const isValidIp = (value) => /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(value).trim())
 
+  const prunePendingBlocks = useCallback((deviceId) => {
+    const key = String(deviceId)
+    const current = pendingBlockRef.current.get(key)
+    if (!current) return
+    const now = Date.now()
+    const next = new Map()
+    current.forEach((timestamp, ip) => {
+      if (now - timestamp <= pendingBlockTtlMs) {
+        next.set(ip, timestamp)
+      }
+    })
+    if (next.size) {
+      pendingBlockRef.current.set(key, next)
+    } else {
+      pendingBlockRef.current.delete(key)
+    }
+  }, [])
+
   const loadBlockedFromSettings = useCallback(
     async (list = deviceList) => {
       if (!list.length) {
@@ -274,15 +294,33 @@ const LogsPage = () => {
           if (!payload || typeof payload !== 'object') {
             return
           }
+          const rawTime =
+            payload?._received_at ??
+            payload?.received_at ??
+            payload?.time ??
+            payload?.timestamp ??
+            null
+          const payloadTime = rawTime ? new Date(rawTime).getTime() : null
           const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
           const ips = normalizeBlockedList(blocked)
             .filter((ip) => isValidIp(ip))
             .map((ip) => ip.toLowerCase())
           const device = list[index]
-          if (ips.length) {
-            nextMap.set(String(device.id), new Set(ips))
+          const deviceKey = String(device.id)
+          prunePendingBlocks(deviceKey)
+          const pending = pendingBlockRef.current.get(deviceKey)
+          const pendingTimes = pending ? Array.from(pending.values()) : []
+          const maxPendingTime = pendingTimes.length ? Math.max(...pendingTimes) : null
+          const shouldMergePending =
+            pending && pending.size && (!payloadTime || (maxPendingTime != null && payloadTime < maxPendingTime))
+          const merged = new Set(ips)
+          if (shouldMergePending) {
+            pending.forEach((_ts, ip) => merged.add(ip))
+          }
+          if (merged.size) {
+            nextMap.set(deviceKey, merged)
           } else {
-            nextMap.delete(String(device.id))
+            nextMap.delete(deviceKey)
           }
         })
 
@@ -291,7 +329,7 @@ const LogsPage = () => {
         // ignore
       }
     },
-    [blockedByDevice, deviceList],
+    [blockedByDevice, deviceList, prunePendingBlocks],
   )
 
   const requestSettingsForDevices = useCallback(
@@ -363,13 +401,16 @@ const LogsPage = () => {
         })
         toast.success(`Blocked ${ipValue}`)
         if (deviceId != null) {
+          const deviceKey = String(deviceId)
+          const pending = pendingBlockRef.current.get(deviceKey) ?? new Map()
+          pending.set(ipKey, Date.now())
+          pendingBlockRef.current.set(deviceKey, pending)
           setBlockedByDevice((prev) => {
             const next = new Map(prev)
-            const key = String(deviceId)
-            const existing = next.get(key) ?? new Set()
+            const existing = next.get(deviceKey) ?? new Set()
             const updated = new Set(existing)
             updated.add(ipKey)
-            next.set(key, updated)
+            next.set(deviceKey, updated)
             return next
           })
         }
