@@ -87,7 +87,7 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               MAC
             </span>
-            <span className="font-mono text-xs font-semibold text-slate-600">
+            <span className="font-mono text-sm font-semibold text-slate-800">
               {device.mac_address ?? '--'}
             </span>
           </div>

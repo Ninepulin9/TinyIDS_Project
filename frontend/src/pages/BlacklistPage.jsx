@@ -88,14 +88,6 @@ const BlacklistPage = () => {
     return null
   }
 
-  const isFreshSettings = (payload, maxAgeMs = 30000) => {
-    const raw = payload?._received_at ?? payload?.received_at ?? payload?.time ?? payload?.timestamp
-    if (!raw) return true
-    const parsed = new Date(raw)
-    if (Number.isNaN(parsed.getTime())) return true
-    return Date.now() - parsed.getTime() <= maxAgeMs
-  }
-
   const loadBlacklist = useCallback(async ({ forceRequest = false } = {}) => {
     setLoading(true)
     try {
@@ -132,17 +124,56 @@ const BlacklistPage = () => {
         const settingsResults = await Promise.allSettled(
           tokenDevices.map((device) => fetchSettingsWithRetry(device.id)),
         )
-        const settingsEntries = []
+        const settingsPayloadById = new Map()
+        const missingDevices = []
 
         settingsResults.forEach((result, idx) => {
-          if (result.status !== 'fulfilled') return
+          const device = tokenDevices[idx]
+          if (result.status !== 'fulfilled') {
+            missingDevices.push(device)
+            return
+          }
           const payload = result.value
+          if (!payload || typeof payload !== 'object') {
+            missingDevices.push(device)
+            return
+          }
+          settingsPayloadById.set(device.id, payload)
+        })
+
+        if (missingDevices.length) {
+          try {
+            const { data: logData } = await api.get('/api/logs')
+            const logs = Array.isArray(logData) ? logData : []
+            const latestByDevice = new Map()
+            logs.forEach((log) => {
+              const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
+              if (topic !== 'esp/setting/now') return
+              const deviceId = log?.device_id
+              if (deviceId == null || latestByDevice.has(deviceId)) return
+              if (log?.payload && typeof log.payload === 'object') {
+                latestByDevice.set(deviceId, log.payload)
+              }
+            })
+            missingDevices.forEach((device) => {
+              const fallback = latestByDevice.get(device.id)
+              if (fallback) {
+                settingsPayloadById.set(device.id, fallback)
+              }
+            })
+          } catch {
+            // ignore log fallback errors
+          }
+        }
+
+        const settingsEntries = []
+
+        tokenDevices.forEach((device) => {
+          const payload = settingsPayloadById.get(device.id)
           if (!payload || typeof payload !== 'object') return
-          if (!isFreshSettings(payload)) return
           const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
           const ips = normalizeBlockedList(blocked)
           if (!ips.length) return
-          const device = tokenDevices[idx]
           const seenDeviceIps = new Set()
           ips.forEach((ip) => {
             if (!isValidIp(ip)) return
