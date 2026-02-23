@@ -54,19 +54,23 @@ const ESPConfigPage = () => {
     return Array.from(byKey.values())
   }
 
-  const sendAliveCheck = useCallback(async (list) => {
+  const sendAliveCheck = useCallback(async (list, { force = false, onlyMissing = false } = {}) => {
     const liveDevices = list.filter((d) => d?.id && d.token)
     if (!liveDevices.length) return
+    const targets = onlyMissing
+      ? liveDevices.filter((device) => !device?.last_seen || !device?.ip_address)
+      : liveDevices
+    if (!targets.length) return
     const now = Date.now()
-    if (now - lastAlivePingRef.current < 5000) return
+    if (!force && now - lastAlivePingRef.current < 5000) return
     lastAlivePingRef.current = now
-    const needsCheck = liveDevices.some((device) => !device?.last_seen)
+    const needsCheck = targets.some((device) => !device?.last_seen)
     if (needsCheck) {
       setAliveCheckAt(now)
     }
     try {
       await Promise.all(
-        liveDevices.map((device) =>
+        targets.map((device) =>
           api.post(`/api/devices/${device.id}/publish`, {
             topic_base: 'esp/Alive/Check',
             message: `Test-${device.token}`,
@@ -117,7 +121,7 @@ const ESPConfigPage = () => {
       const fetchedDevices = Array.isArray(data) ? data : []
       const deduped = dedupeDevices(fetchedDevices)
       setDevices(deduped)
-      sendAliveCheck(deduped)
+      sendAliveCheck(deduped, { onlyMissing: true })
       const pendingDevice = findPendingRegistration(deduped)
       if (pendingDevice) {
         const hasIp = Boolean(pendingDevice.ip_address)
@@ -126,6 +130,12 @@ const ESPConfigPage = () => {
           pendingRegistrationRef.current = { mac: '', token: '' }
           clearRegistrationPoll()
           toast.success('Device registered')
+          if (!hasIp) {
+            sendAliveCheck([pendingDevice], { force: true, onlyMissing: true })
+            setTimeout(() => {
+              fetchDevices({ silent: true })
+            }, 1000)
+          }
         }
       }
       const needsIpRefresh = deduped.some((device) => device?.token && (!device.ip_address || !device.mac_address))

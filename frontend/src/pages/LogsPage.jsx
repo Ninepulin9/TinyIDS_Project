@@ -265,18 +265,25 @@ const LogsPage = () => {
 
         if (!isMountedRef.current) return
 
-        const nextMap = new Map()
+        const nextMap = new Map(blockedByDevice)
         results.forEach((result, index) => {
-          if (result.status !== 'fulfilled') return
+          if (result.status !== 'fulfilled') {
+            return
+          }
           const payload = result.value?.data
-          if (!payload || typeof payload !== 'object') return
+          if (!payload || typeof payload !== 'object') {
+            return
+          }
           const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS
           const ips = normalizeBlockedList(blocked)
             .filter((ip) => isValidIp(ip))
             .map((ip) => ip.toLowerCase())
-          if (!ips.length) return
           const device = list[index]
-          nextMap.set(String(device.id), new Set(ips))
+          if (ips.length) {
+            nextMap.set(String(device.id), new Set(ips))
+          } else {
+            nextMap.delete(String(device.id))
+          }
         })
 
         setBlockedByDevice(nextMap)
@@ -284,7 +291,7 @@ const LogsPage = () => {
         // ignore
       }
     },
-    [deviceList],
+    [blockedByDevice, deviceList],
   )
 
   const requestSettingsForDevices = useCallback(
