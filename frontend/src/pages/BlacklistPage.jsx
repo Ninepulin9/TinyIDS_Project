@@ -132,7 +132,6 @@ const BlacklistPage = () => {
         const settingsResults = await Promise.allSettled(
           tokenDevices.map((device) => fetchSettingsWithRetry(device.id)),
         )
-        const seenIps = new Set()
         const settingsEntries = []
 
         settingsResults.forEach((result, idx) => {
@@ -144,11 +143,12 @@ const BlacklistPage = () => {
           const ips = normalizeBlockedList(blocked)
           if (!ips.length) return
           const device = tokenDevices[idx]
+          const seenDeviceIps = new Set()
           ips.forEach((ip) => {
             if (!isValidIp(ip)) return
             const key = ip.toLowerCase()
-            if (seenIps.has(key)) return
-            seenIps.add(key)
+            if (seenDeviceIps.has(key)) return
+            seenDeviceIps.add(key)
             settingsEntries.push({
               id: `settings-${device.id}-${key}`,
               device_id: device.id,
@@ -232,7 +232,7 @@ const BlacklistPage = () => {
   }, [])
 
   useEffect(() => {
-    loadBlacklist()
+    loadBlacklist({ forceRequest: true })
     return () => {
       if (retryRef.current.timer) {
         clearTimeout(retryRef.current.timer)
