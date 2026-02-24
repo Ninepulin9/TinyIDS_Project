@@ -214,6 +214,7 @@ const LogsPage = () => {
   const pageSize = 15
   const isMountedRef = useRef(false)
   const pollIntervalRef = useRef(null)
+  const fetchLatestRef = useRef(null)
   const blacklistRequestRef = useRef(0)
   const pendingBlockRef = useRef(new Map())
   const pendingBlockTtlMs = 60000
@@ -446,8 +447,12 @@ const LogsPage = () => {
   }, [dedupeDevices])
 
   useEffect(() => {
+    fetchLatestRef.current = fetchLatest
+  }, [fetchLatest])
+
+  useEffect(() => {
     isMountedRef.current = true
-    fetchLatest({ silent: false })
+    fetchLatestRef.current?.({ silent: false })
     fetchDevices()
     api
       .get('/api/settings/system')
@@ -458,15 +463,22 @@ const LogsPage = () => {
         }
       })
       .catch(() => {})
-    pollIntervalRef.current = setInterval(() => fetchLatest({ silent: true }).catch(() => {}), 5000)
     return () => {
       isMountedRef.current = false
+    }
+  }, [fetchDevices])
+
+  useEffect(() => {
+    pollIntervalRef.current = setInterval(() => {
+      fetchLatestRef.current?.({ silent: true }).catch(() => {})
+    }, 5000)
+    return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current)
         pollIntervalRef.current = null
       }
     }
-  }, [fetchLatest])
+  }, [])
 
   useEffect(() => {
     if (autoBlockEnabled) {
