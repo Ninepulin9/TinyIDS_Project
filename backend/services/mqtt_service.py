@@ -38,6 +38,8 @@ class MQTTService:
         self.latest_settings: dict[int, dict] = {}
         self.pending_blocks: dict[int, set[str]] = {}
         self.session_codes: dict[str, str] = {}
+        self.pending_settings_requests: dict[str, list[int]] = {}
+        self.pending_settings_lock = threading.Lock()
 
     def init_app(self, app) -> None:
         self.app = app
@@ -189,7 +191,14 @@ class MQTTService:
     def _handle_settings(self, payload: dict, topic: str) -> None:
         device = self._resolve_device(payload)
         if not device:
+            token_value = self._coerce_str(payload.get("token"))
+            if token_value:
+                device = self._pop_pending_settings_device(token_value)
+        if not device:
             return
+        token_value = self._coerce_str(payload.get("token"))
+        if token_value:
+            self._clear_pending_settings_request(token_value, device.id)
         self._touch_device(device, payload, mark_active=True)
         enriched = self._enrich_payload(payload, topic, default_type="ESP Settings")
         received_at = datetime.utcnow().isoformat() + "Z"
@@ -407,6 +416,7 @@ class MQTTService:
                                     blocked_by_user[user_id] = self._get_blacklist_ips(user_id)
                                 # Request latest settings (same as Rule Management)
                                 control_topic = self._control_topic_for_device(device)
+                                self._register_settings_request(device)
                                 self.client.publish(
                                     control_topic,
                                     f"showsetting-{token_value}",
@@ -747,6 +757,7 @@ class MQTTService:
             # Request fresh settings so we can merge with full payload
             if self.client:
                 control_topic = self._control_topic_for_device(device)
+                self._register_settings_request(device)
                 self.client.publish(
                     control_topic,
                     f"showsetting-{token_value}",
@@ -793,6 +804,54 @@ class MQTTService:
             if code:
                 return code
         return None
+
+    def _register_settings_request(self, device: Device) -> None:
+        if not device or not device.token:
+            return
+        token_value = self._coerce_str(device.token.token)
+        if not token_value:
+            return
+        token_key = token_value.lower()
+        with self.pending_settings_lock:
+            queue = self.pending_settings_requests.setdefault(token_key, [])
+            if device.id not in queue:
+                queue.append(device.id)
+            # Cap queue size to avoid unbounded growth
+            if len(queue) > 50:
+                self.pending_settings_requests[token_key] = queue[-50:]
+
+    def _pop_pending_settings_device(self, token_value: str) -> Device | None:
+        token_key = self._coerce_str(token_value)
+        if not token_key:
+            return None
+        token_key = token_key.lower()
+        device_id = None
+        with self.pending_settings_lock:
+            queue = self.pending_settings_requests.get(token_key)
+            if not queue:
+                return None
+            device_id = queue.pop(0)
+            if not queue:
+                self.pending_settings_requests.pop(token_key, None)
+        if device_id is None:
+            return None
+        return Device.query.get(device_id)
+
+    def _clear_pending_settings_request(self, token_value: str, device_id: int) -> None:
+        token_key = self._coerce_str(token_value)
+        if not token_key:
+            return
+        token_key = token_key.lower()
+        with self.pending_settings_lock:
+            queue = self.pending_settings_requests.get(token_key)
+            if not queue:
+                return
+            if device_id in queue:
+                queue = [item for item in queue if item != device_id]
+                if queue:
+                    self.pending_settings_requests[token_key] = queue
+                else:
+                    self.pending_settings_requests.pop(token_key, None)
 
     def _control_topic_for_device(self, device: Device) -> str:
         code = self._session_code_for_device(device)

@@ -88,6 +88,24 @@ const BlacklistPage = () => {
     return null
   }
 
+  const mergeEntriesByDevice = (previousEntries, nextEntries, respondedDeviceIds) => {
+    const base = Array.isArray(previousEntries) ? previousEntries : []
+    const incoming = Array.isArray(nextEntries) ? nextEntries : []
+    const responded = respondedDeviceIds && respondedDeviceIds.size ? respondedDeviceIds : null
+    const keep = responded
+      ? base.filter((entry) => !responded.has(entry.device_id))
+      : base
+    const combined = [...keep, ...incoming]
+    const byKey = new Map()
+    combined.forEach((entry) => {
+      const deviceKey = entry.device_id ?? 'global'
+      const ipKey = entry.ip_address ? String(entry.ip_address).toLowerCase() : entry.id
+      const key = `${deviceKey}-${ipKey}`
+      byKey.set(key, entry)
+    })
+    return Array.from(byKey.values())
+  }
+
   const loadBlacklist = useCallback(async ({ forceRequest = false } = {}) => {
     setLoading(true)
     try {
@@ -103,6 +121,57 @@ const BlacklistPage = () => {
       setDevices(deviceList)
 
       let mergedEntries = []
+      let dbEntries = []
+      let respondedDeviceIds = new Set()
+      let logsCache = null
+
+      const fetchLogsOnce = async () => {
+        if (logsCache) return logsCache
+        try {
+          const { data: logData } = await api.get('/api/logs')
+          logsCache = Array.isArray(logData) ? logData : []
+        } catch {
+          logsCache = []
+        }
+        return logsCache
+      }
+
+      try {
+        const { data: blacklistData } = await api.get('/api/blacklist')
+        const rows = Array.isArray(blacklistData) ? blacklistData : []
+        if (rows.length) {
+          const logs = await fetchLogsOnce()
+          const ipDeviceMap = new Map()
+          logs.forEach((log) => {
+            const payload = log?.payload ?? {}
+            const ip = String(payload?.source_ip ?? log?.source_ip ?? '').trim()
+            if (!ip || ipDeviceMap.has(ip)) return
+            const deviceId = log?.device_id ?? null
+            if (deviceId == null) return
+            const name =
+              log?.device_name ?? log?.device ?? payload?.device_name ?? payload?.device ?? 'Unknown'
+            ipDeviceMap.set(ip, { device_id: deviceId, device_name: name })
+          })
+          dbEntries = rows
+            .map((row) => {
+              const ip = String(row?.ip_address ?? '').trim()
+              if (!ip) return null
+              const mapped = ipDeviceMap.get(ip)
+              return {
+                id: `db-${row?.id ?? ip.toLowerCase()}`,
+                device_id: mapped?.device_id ?? null,
+                device_name: mapped?.device_name ?? 'Unknown',
+                ip_address: ip,
+                reason: row?.reason ?? 'Database',
+                created_at: row?.created_at ?? new Date().toISOString(),
+                readOnly: Boolean(mapped?.device_id),
+              }
+            })
+            .filter(Boolean)
+        }
+      } catch {
+        // ignore blacklist fetch errors
+      }
       if (tokenDevices.length) {
         const now = Date.now()
         const shouldRequest = forceRequest
@@ -141,29 +210,26 @@ const BlacklistPage = () => {
           settingsPayloadById.set(device.id, payload)
         })
 
+        respondedDeviceIds = new Set(settingsPayloadById.keys())
+
         if (missingDevices.length) {
-          try {
-            const { data: logData } = await api.get('/api/logs')
-            const logs = Array.isArray(logData) ? logData : []
-            const latestByDevice = new Map()
-            logs.forEach((log) => {
-              const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
-              if (topic !== 'esp/setting/now') return
-              const deviceId = log?.device_id
-              if (deviceId == null || latestByDevice.has(deviceId)) return
-              if (log?.payload && typeof log.payload === 'object') {
-                latestByDevice.set(deviceId, log.payload)
-              }
-            })
-            missingDevices.forEach((device) => {
-              const fallback = latestByDevice.get(device.id)
-              if (fallback) {
-                settingsPayloadById.set(device.id, fallback)
-              }
-            })
-          } catch {
-            // ignore log fallback errors
-          }
+          const logs = await fetchLogsOnce()
+          const latestByDevice = new Map()
+          logs.forEach((log) => {
+            const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
+            if (topic !== 'esp/setting/now') return
+            const deviceId = log?.device_id
+            if (deviceId == null || latestByDevice.has(deviceId)) return
+            if (log?.payload && typeof log.payload === 'object') {
+              latestByDevice.set(deviceId, log.payload)
+            }
+          })
+          missingDevices.forEach((device) => {
+            const fallback = latestByDevice.get(device.id)
+            if (fallback) {
+              settingsPayloadById.set(device.id, fallback)
+            }
+          })
         }
 
         const settingsEntries = []
@@ -236,6 +302,10 @@ const BlacklistPage = () => {
         }
       }
 
+      if (dbEntries.length) {
+        mergedEntries = [...mergedEntries, ...dbEntries]
+      }
+
       if (tokenDevices.length && mergedEntries.length === 0 && retryRef.current.attempts < maxRetries) {
         retryRef.current.attempts += 1
         keepLoading = true
@@ -245,7 +315,7 @@ const BlacklistPage = () => {
         return
       }
       retryRef.current.attempts = 0
-      setEntries(mergedEntries)
+      setEntries((prev) => mergeEntriesByDevice(prev, mergedEntries, respondedDeviceIds))
       setLastUpdated(new Date().toISOString())
       if (!keepLoading) {
         setLoading(false)

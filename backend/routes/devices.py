@@ -307,6 +307,8 @@ def publish_to_device(device_id: int):
         if message is None:
             message = "showsetting"
         payload_text = str(message)
+        if "showsetting" in payload_text.lower():
+            mqtt_service._register_settings_request(device)
 
     mqtt_service.client.publish(topic, payload_text, qos=0, retain=False)
     return jsonify({"status": "sent", "topic": topic, "payload": payload_text})
