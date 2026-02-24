@@ -217,6 +217,7 @@ const LogsPage = () => {
   const blacklistRequestRef = useRef(0)
   const pendingBlockRef = useRef(new Map())
   const pendingBlockTtlMs = 60000
+  const autoBlockSinceRef = useRef(Date.now())
 
   const dedupeDevices = useCallback((list) => {
     const byKey = new Map()
@@ -364,14 +365,23 @@ const LogsPage = () => {
       }
       try {
         const { data } = await api.get('/api/logs')
-      if (!isMountedRef.current) return
-      const records = Array.isArray(data) ? data : []
-      const normalized = records.map((record) => normalizeSocketLog(record)).filter(Boolean)
-      setLogs((prev) => mergeLogs(normalized, prev))
-      queueAutoBlockIps(normalized)
-    } catch (err) {
-      if (!isMountedRef.current) return
-      const message =
+        if (!isMountedRef.current) return
+        const records = Array.isArray(data) ? data : []
+        const normalized = records.map((record) => normalizeSocketLog(record)).filter(Boolean)
+        setLogs((prev) => mergeLogs(normalized, prev))
+        if (autoBlockEnabled) {
+          const nowMs = Date.now()
+          const sinceMs = autoBlockSinceRef.current || 0
+          const recent = normalized.filter((log) => {
+            const ts = dayjs(log.timestamp).valueOf()
+            return Number.isFinite(ts) && ts >= sinceMs
+          })
+          queueAutoBlockIps(recent)
+          autoBlockSinceRef.current = nowMs
+        }
+      } catch (err) {
+        if (!isMountedRef.current) return
+        const message =
           err?.response?.data?.message ??
           err?.message ??
           'Unable to fetch intrusion logs right now. Please try again shortly.'
@@ -383,7 +393,7 @@ const LogsPage = () => {
         }
       }
     },
-    [],
+    [autoBlockEnabled, queueAutoBlockIps],
   )
 
   const fetchDevices = useCallback(async () => {
@@ -433,6 +443,12 @@ const LogsPage = () => {
       }
     }
   }, [fetchLatest])
+
+  useEffect(() => {
+    if (autoBlockEnabled) {
+      autoBlockSinceRef.current = Date.now()
+    }
+  }, [autoBlockEnabled])
 
   useEffect(() => {
     const handleStorage = (event) => {
