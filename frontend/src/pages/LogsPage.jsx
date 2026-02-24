@@ -205,7 +205,7 @@ const LogsPage = () => {
       return 'all'
     }
   })
-  const [blacklistIps, setBlacklistIps] = useState(new Set())
+  const [blacklistByDevice, setBlacklistByDevice] = useState(new Map())
   const [blacklistLoading, setBlacklistLoading] = useState(true)
   const [autoBlockEnabled, setAutoBlockEnabled] = useState(null)
   const [blockSubmitting, setBlockSubmitting] = useState(new Set())
@@ -244,16 +244,20 @@ const LogsPage = () => {
 
   const isValidIp = (value) => /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(value).trim())
 
-  const mergeWithPendingBlocks = useCallback((baseSet) => {
-    const next = new Set(baseSet)
+  const mergeWithPendingBlocks = useCallback((baseMap) => {
+    const next = new Map(baseMap)
     const now = Date.now()
     const pending = pendingBlockRef.current
-    pending.forEach((timestamp, ip) => {
-      if (now - timestamp <= pendingBlockTtlMs) {
-        next.add(ip)
-      } else {
-        pending.delete(ip)
+    pending.forEach((timestamp, key) => {
+      if (now - timestamp > pendingBlockTtlMs) {
+        pending.delete(key)
+        return
       }
+      const [deviceId, ip] = String(key).split('|')
+      if (!deviceId || !ip) return
+      const set = next.get(deviceId) ?? new Set()
+      set.add(ip)
+      next.set(deviceId, set)
     })
     return next
   }, [])
@@ -261,24 +265,35 @@ const LogsPage = () => {
   const queueAutoBlockIps = useCallback(
     (logsBatch) => {
       if (autoBlockEnabled === false) return
-      const ips = new Set()
+      const ips = new Map()
       logsBatch.forEach((log) => {
         const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
         if (topic !== 'esp/alert') return
         const source = String(log?.source_ip ?? '').trim()
         if (!isValidIp(source)) return
-        ips.add(source.toLowerCase())
+        const deviceId = resolveDeviceId(log, tokenIdMap)
+        if (!deviceId) return
+        const key = String(deviceId)
+        const set = ips.get(key) ?? new Set()
+        set.add(source.toLowerCase())
+        ips.set(key, set)
       })
       if (!ips.size) return
       const now = Date.now()
-      ips.forEach((ip) => pendingBlockRef.current.set(ip, now))
-      setBlacklistIps((prev) => {
-        const next = new Set(prev)
-        ips.forEach((ip) => next.add(ip))
+      ips.forEach((set, deviceId) => {
+        set.forEach((ip) => pendingBlockRef.current.set(`${deviceId}|${ip}`, now))
+      })
+      setBlacklistByDevice((prev) => {
+        const next = new Map(prev)
+        ips.forEach((set, deviceId) => {
+          const existing = next.get(String(deviceId)) ?? new Set()
+          set.forEach((ip) => existing.add(ip))
+          next.set(String(deviceId), existing)
+        })
         return next
       })
     },
-    [autoBlockEnabled],
+    [autoBlockEnabled, tokenIdMap],
   )
 
   const fetchBlacklistIps = useCallback(
@@ -290,13 +305,16 @@ const LogsPage = () => {
         const { data } = await api.get('/api/blacklist')
         if (!isMountedRef.current) return
         const rows = Array.isArray(data) ? data : []
-        const next = new Set()
+        const next = new Map()
         rows.forEach((row) => {
+          const deviceId = row?.device_id != null ? String(row.device_id) : null
           const ip = String(row?.ip_address ?? '').trim().toLowerCase()
-          if (!ip) return
-          next.add(ip)
+          if (!deviceId || !ip) return
+          const set = next.get(deviceId) ?? new Set()
+          set.add(ip)
+          next.set(deviceId, set)
         })
-        setBlacklistIps(mergeWithPendingBlocks(next))
+        setBlacklistByDevice(mergeWithPendingBlocks(next))
       } catch {
         // ignore
       } finally {
@@ -305,7 +323,7 @@ const LogsPage = () => {
         }
       }
     },
-    [blacklistIps.size, blacklistLoading, mergeWithPendingBlocks],
+    [mergeWithPendingBlocks],
   )
 
   const handleBlock = useCallback(
@@ -319,6 +337,11 @@ const LogsPage = () => {
         toast.error(`Cannot block ${ipValue}`)
         return
       }
+      const resolvedDeviceId = resolveDeviceId(log, tokenIdMap)
+      if (!resolvedDeviceId) {
+        toast.error('Device not found for this alert.')
+        return
+      }
       const ipKey = ipValue.toLowerCase()
       setBlockSubmitting((prev) => {
         const next = new Set(prev)
@@ -326,19 +349,20 @@ const LogsPage = () => {
         return next
       })
       try {
-        const deviceId = resolveDeviceId(log, tokenIdMap)
         const tokenValue = log?.payload?.token ? String(log.payload.token) : ''
         await api.post('/api/blacklist', {
           ip_address: ipValue,
           reason: log.alert_msg || log.type || 'Manual block',
-          device_id: deviceId ?? undefined,
+          device_id: resolvedDeviceId,
           token: tokenValue || undefined,
         })
         toast.success(`Blocked ${ipValue}`)
-        pendingBlockRef.current.set(ipKey, Date.now())
-        setBlacklistIps((prev) => {
-          const next = new Set(prev)
-          next.add(ipKey)
+        pendingBlockRef.current.set(`${resolvedDeviceId}|${ipKey}`, Date.now())
+        setBlacklistByDevice((prev) => {
+          const next = new Map(prev)
+          const set = next.get(String(resolvedDeviceId)) ?? new Set()
+          set.add(ipKey)
+          next.set(String(resolvedDeviceId), set)
           return next
         })
         await fetchBlacklistIps({ force: true })
@@ -488,11 +512,14 @@ const LogsPage = () => {
       }
       if (topic === 'esp/alert') {
         const source = String(normalized?.source_ip ?? '').trim().toLowerCase()
-        if (autoBlockEnabled && source && isValidIp(source)) {
-          pendingBlockRef.current.set(source, Date.now())
-          setBlacklistIps((prev) => {
-            const next = new Set(prev)
-            next.add(source)
+        const resolvedId = resolveDeviceId(normalized, tokenIdMap)
+        if (autoBlockEnabled && source && isValidIp(source) && resolvedId) {
+          pendingBlockRef.current.set(`${resolvedId}|${source}`, Date.now())
+          setBlacklistByDevice((prev) => {
+            const next = new Map(prev)
+            const set = next.get(String(resolvedId)) ?? new Set()
+            set.add(source)
+            next.set(String(resolvedId), set)
             return next
           })
         }
@@ -511,15 +538,18 @@ const LogsPage = () => {
       socket.off('log:new', handleLogNew)
       socket.off('device:registered', fetchDevices)
     }
-  }, [autoBlockEnabled, fetchBlacklistIps, fetchDevices, queueAutoBlockIps])
+  }, [autoBlockEnabled, fetchBlacklistIps, fetchDevices, queueAutoBlockIps, tokenIdMap])
 
   useEffect(() => {
     fetchBlacklistIps({ force: true })
   }, [fetchBlacklistIps])
 
   const resolveBlockedSet = useCallback(
-    () => (blacklistIps.size ? blacklistIps : null),
-    [blacklistIps],
+    (deviceId) => {
+      if (!deviceId) return null
+      return blacklistByDevice.get(String(deviceId)) ?? null
+    },
+    [blacklistByDevice],
   )
 
   const timeFilteredLogs = useMemo(() => {
@@ -823,7 +853,8 @@ const LogsPage = () => {
               ) : (
                 pagedLogs.map((log) => {
                   const ipKey = String(log.source_ip ?? '').trim().toLowerCase()
-                  const deviceBlockedSet = resolveBlockedSet()
+                  const resolvedId = resolveDeviceId(log, tokenIdMap)
+                  const deviceBlockedSet = resolveBlockedSet(resolvedId)
                   const isBlocked = ipKey && deviceBlockedSet ? deviceBlockedSet.has(ipKey) : false
                   const statusClass = isBlocked
                     ? statusStyles.blocked

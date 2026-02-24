@@ -92,8 +92,10 @@ class Blacklist(db.Model, TimestampMixin):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    ip_address = db.Column(db.String(64), unique=True, nullable=False)
+    device_id = db.Column(db.Integer, db.ForeignKey("devices.id"), nullable=True)
+    ip_address = db.Column(db.String(64), nullable=False)
     reason = db.Column(db.String(255))
+    device = db.relationship("Device", backref="blacklist_entries")
 
 
 class SystemSettings(db.Model, TimestampMixin):

@@ -157,15 +157,17 @@ const BlacklistPage = () => {
               const ip = String(row?.ip_address ?? '').trim()
               if (!ip) return null
               const mapped = ipDeviceMap.get(ip)
+              const rowDeviceId = row?.device_id ?? mapped?.device_id ?? null
+              const rowDeviceName = row?.device_name ?? mapped?.device_name ?? 'Unknown'
               return {
                 id: `db-${row?.id ?? ip.toLowerCase()}`,
                 blacklist_id: row?.id ?? null,
-                device_id: mapped?.device_id ?? null,
-                device_name: mapped?.device_name ?? 'Unknown',
+                device_id: rowDeviceId,
+                device_name: rowDeviceName,
                 ip_address: ip,
                 reason: row?.reason ?? 'Database',
                 created_at: row?.created_at ?? new Date().toISOString(),
-                readOnly: Boolean(mapped?.device_id),
+                readOnly: Boolean(rowDeviceId),
               }
             })
             .filter(Boolean)
@@ -471,11 +473,16 @@ const BlacklistPage = () => {
         try {
           const { data: blacklistData } = await api.get('/api/blacklist')
           const rows = Array.isArray(blacklistData) ? blacklistData : []
-          const match = rows.find(
-            (row) =>
+          const match = rows.find((row) => {
+            const sameIp =
               String(row?.ip_address ?? '').trim().toLowerCase() ===
-              String(entry.ip_address).trim().toLowerCase(),
-          )
+              String(entry.ip_address).trim().toLowerCase()
+            const sameDevice =
+              entry.device_id != null
+                ? String(row?.device_id ?? '') === String(entry.device_id)
+                : row?.device_id == null
+            return sameIp && sameDevice
+          })
           if (match?.id) {
             await api.delete(`/api/blacklist/${match.id}`)
           }

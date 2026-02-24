@@ -4,6 +4,7 @@ import re
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import text
+from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 
 from extensions import db
@@ -33,10 +34,14 @@ def _serialize_entry(entry) -> dict:
         if hasattr(created_at, "isoformat")
         else created_at
     )
+    device = getattr(entry, "device", None)
+    device_name = getattr(entry, "device_name", None) or (device.name if device else None)
+    device_id = getattr(entry, "device_id", None)
 
     return {
         "id": getattr(entry, "id", None),
-        "device_name": getattr(entry, "device_name", None) or "Unknown",
+        "device_id": device_id,
+        "device_name": device_name or "Unknown",
         "ip_address": ip_address,
         "reason": reason,
         "created_at": created_value,
@@ -49,7 +54,9 @@ def _is_valid_ip(value: str) -> bool:
 
 def _raw_blacklist_rows():
     rows = db.session.execute(
-        text("SELECT id, ip_address, reason, created_at FROM blacklist ORDER BY created_at DESC")
+        text(
+            "SELECT id, device_id, ip_address, reason, created_at FROM blacklist ORDER BY created_at DESC"
+        )
     )
     for row in rows:
         yield row
@@ -62,6 +69,7 @@ def list_blacklist():
     try:
         entries = (
             Blacklist.query.filter(Blacklist.user_id == user_id)
+            .options(joinedload(Blacklist.device))
             .order_by(Blacklist.created_at.desc())
             .all()
         )
@@ -97,15 +105,27 @@ def add_blacklist_entry():
         if token_row and token_row.device and token_row.device.user_id == user_id:
             device = token_row.device
 
-    entry = Blacklist.query.filter(Blacklist.ip_address == ip_address).first()
+    entry_query = Blacklist.query.filter(
+        Blacklist.user_id == user_id, Blacklist.ip_address == ip_address
+    )
+    if device:
+        entry_query = entry_query.filter(Blacklist.device_id == device.id)
+    else:
+        entry_query = entry_query.filter(Blacklist.device_id.is_(None))
+    entry = entry_query.first()
     if not entry:
-        entry = Blacklist(user_id=user_id, ip_address=ip_address, reason=reason)
+        entry = Blacklist(
+            user_id=user_id,
+            device_id=device.id if device else None,
+            ip_address=ip_address,
+            reason=reason,
+        )
         db.session.add(entry)
         try:
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-            entry = Blacklist.query.filter(Blacklist.ip_address == ip_address).first()
+            entry = entry_query.first()
     else:
         if reason and not entry.reason:
             entry.reason = reason

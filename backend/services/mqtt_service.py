@@ -181,7 +181,7 @@ class MQTTService:
             destination_ip=self._derive_ip(payload, "destination"),
         )
         if source_ip and self._auto_block_allowed(device.user_id):
-            self._auto_block_ip(device.user_id, source_ip, enriched)
+            self._auto_block_ip(device.user_id, device.id, source_ip, enriched)
             self._queue_block_for_device(device, source_ip)
         if event_time:
             log.created_at = event_time
@@ -418,8 +418,11 @@ class MQTTService:
                                 if not token_value:
                                     continue
                                 user_id = device.user_id
-                                if user_id not in blocked_by_user:
-                                    blocked_by_user[user_id] = self._get_blacklist_ips(user_id)
+                                key = (user_id, device.id)
+                                if key not in blocked_by_user:
+                                    blocked_by_user[key] = self._get_blacklist_ips(
+                                        user_id, device.id
+                                    )
                                 # Request latest settings (same as Rule Management)
                                 control_topic = self._control_topic_for_device(device)
                                 self._register_settings_request(device)
@@ -432,7 +435,7 @@ class MQTTService:
                                 if self.app:
                                     self.app.logger.info("Settings poll: requested settings for %s", token_value)
                                 # Merge DB blacklist into device settings if missing
-                                self._sync_blacklist_to_device(device, blocked_by_user[user_id])
+                                self._sync_blacklist_to_device(device, blocked_by_user[key])
                 except Exception as exc:  # noqa: BLE001
                     if self.app:
                         self.app.logger.exception("Settings poll error: %s", exc)
@@ -479,8 +482,11 @@ class MQTTService:
 
         threading.Thread(target=_loop, daemon=True).start()
 
-    def _get_blacklist_ips(self, user_id: int) -> list[str]:
-        rows = Blacklist.query.filter(Blacklist.user_id == user_id).all()
+    def _get_blacklist_ips(self, user_id: int, device_id: int | None = None) -> list[str]:
+        query = Blacklist.query.filter(Blacklist.user_id == user_id)
+        if device_id is not None:
+            query = query.filter(Blacklist.device_id == device_id)
+        rows = query.all()
         ips = []
         for row in rows:
             value = self._coerce_str(row.ip_address)
@@ -697,18 +703,26 @@ class MQTTService:
                 return value
         return None
 
-    def _auto_block_ip(self, user_id: int, ip_address: str, payload: dict) -> None:
+    def _auto_block_ip(self, user_id: int, device_id: int | None, ip_address: str, payload: dict) -> None:
         ip_value = self._coerce_str(ip_address)
         if not ip_value:
             return
         existing = (
-            Blacklist.query.filter(Blacklist.user_id == user_id, Blacklist.ip_address == ip_value)
+            Blacklist.query.filter(
+                Blacklist.user_id == user_id,
+                Blacklist.ip_address == ip_value,
+                Blacklist.device_id == device_id,
+            )
             .first()
         )
         if existing:
             return
         reason = payload.get("alert_msg") or payload.get("type") or "Auto-blocked from alert"
-        db.session.add(Blacklist(user_id=user_id, ip_address=ip_value, reason=str(reason)))
+        db.session.add(
+            Blacklist(
+                user_id=user_id, device_id=device_id, ip_address=ip_value, reason=str(reason)
+            )
+        )
         return
 
     def _auto_block_allowed(self, user_id: int) -> bool:
