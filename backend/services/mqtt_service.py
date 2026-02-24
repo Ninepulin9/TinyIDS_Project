@@ -316,6 +316,20 @@ class MQTTService:
                 "device:registered",
                 {"device_id": device.id, "esp_id": device.esp_id},
             )
+            try:
+                control_topic = self._control_topic_for_device(device)
+                self._register_settings_request(device)
+                self.client.publish(
+                    control_topic,
+                    f"showsetting-{token_value}",
+                    qos=0,
+                    retain=False,
+                )
+                if self.app:
+                    self.app.logger.info("Requested settings after register for %s", mac_value)
+            except Exception as exc:  # noqa: BLE001
+                if self.app:
+                    self.app.logger.warning("Failed to request settings after register: %s", exc)
         return True
 
     def _register_device_from_registration(self, mac_address: str, token: str) -> Device | None:
