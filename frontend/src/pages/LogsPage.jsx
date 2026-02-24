@@ -257,6 +257,29 @@ const LogsPage = () => {
     return next
   }, [])
 
+  const queueAutoBlockIps = useCallback(
+    (logsBatch) => {
+      if (autoBlockEnabled === false) return
+      const ips = new Set()
+      logsBatch.forEach((log) => {
+        const topic = String(log?.payload?._mqtt_topic ?? '').toLowerCase()
+        if (topic !== 'esp/alert') return
+        const source = String(log?.source_ip ?? '').trim()
+        if (!isValidIp(source)) return
+        ips.add(source.toLowerCase())
+      })
+      if (!ips.size) return
+      const now = Date.now()
+      ips.forEach((ip) => pendingBlockRef.current.set(ip, now))
+      setBlacklistIps((prev) => {
+        const next = new Set(prev)
+        ips.forEach((ip) => next.add(ip))
+        return next
+      })
+    },
+    [autoBlockEnabled],
+  )
+
   const fetchBlacklistIps = useCallback(
     async ({ force = false } = {}) => {
       const now = Date.now()
@@ -341,13 +364,14 @@ const LogsPage = () => {
       }
       try {
         const { data } = await api.get('/api/logs')
-        if (!isMountedRef.current) return
-        const records = Array.isArray(data) ? data : []
-        const normalized = records.map((record) => normalizeSocketLog(record)).filter(Boolean)
-        setLogs((prev) => mergeLogs(normalized, prev))
-      } catch (err) {
-        if (!isMountedRef.current) return
-        const message =
+      if (!isMountedRef.current) return
+      const records = Array.isArray(data) ? data : []
+      const normalized = records.map((record) => normalizeSocketLog(record)).filter(Boolean)
+      setLogs((prev) => mergeLogs(normalized, prev))
+      queueAutoBlockIps(normalized)
+    } catch (err) {
+      if (!isMountedRef.current) return
+      const message =
           err?.response?.data?.message ??
           err?.message ??
           'Unable to fetch intrusion logs right now. Please try again shortly.'
@@ -441,7 +465,7 @@ const LogsPage = () => {
       const normalized = normalizeSocketLog(payload)
       if (!normalized) return
       setLogs((prev) => mergeLogs([normalized], prev))
-      fetchLatest({ silent: true }).catch(() => {})
+      queueAutoBlockIps([normalized])
       const topic = String(normalized?.payload?._mqtt_topic ?? '').toLowerCase()
       if (topic === 'esp/setting/now') {
         fetchBlacklistIps()
@@ -471,7 +495,7 @@ const LogsPage = () => {
       socket.off('log:new', handleLogNew)
       socket.off('device:registered', fetchDevices)
     }
-  }, [autoBlockEnabled, fetchBlacklistIps, fetchDevices, fetchLatest])
+  }, [autoBlockEnabled, fetchBlacklistIps, fetchDevices, queueAutoBlockIps])
 
   useEffect(() => {
     fetchBlacklistIps({ force: true })
