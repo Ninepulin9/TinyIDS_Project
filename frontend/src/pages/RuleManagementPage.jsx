@@ -511,12 +511,6 @@ const RuleManagementPage = () => {
       return
     }
     const now = Date.now()
-    if (
-      lastSettingsRequestRef.current.token === deviceToken &&
-      now - lastSettingsRequestRef.current.time < requestThrottleMs
-    ) {
-      return
-    }
     lastSettingsRequestRef.current = { token: deviceToken, time: now }
     requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
     setLoadingRules(true)
