@@ -38,6 +38,7 @@ class MQTTService:
         self.latest_settings: dict[int, dict] = {}
         self.pending_blocks: dict[int, set[str]] = {}
         self.session_codes: dict[str, str] = {}
+        self.last_whitelist_sync: dict[int, float] = {}
         self.pending_settings_requests: dict[str, list[int]] = {}
         self.pending_settings_lock = threading.Lock()
 
@@ -211,6 +212,11 @@ class MQTTService:
         if pending:
             self._apply_blocklist_update(device, pending, enriched)
             self.pending_blocks.pop(device.id, None)
+        try:
+            self._sync_mqtt_whitelist_for_user(device.user_id)
+        except Exception as exc:  # noqa: BLE001
+            if self.app:
+                self.app.logger.warning("Failed to sync MQTT whitelist: %s", exc)
         log = Log(
             user_id=device.user_id,
             device=device,
@@ -870,6 +876,78 @@ class MQTTService:
         if code:
             return f"esp/alive/setting-{code}"
         return "esp/alive/setting"
+
+    def _normalize_mqtt_whitelist(self, value) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            items = [item.strip() for item in value.split(",")]
+        elif isinstance(value, (list, tuple, set)):
+            items = [str(item).strip() for item in value]
+        else:
+            items = [str(value).strip()]
+        return [item for item in items if item]
+
+    def _sync_mqtt_whitelist_for_user(self, user_id: int) -> None:
+        if not self.client:
+            return
+        now = time.time()
+        last = self.last_whitelist_sync.get(user_id, 0)
+        if now - last < 3:
+            return
+        self.last_whitelist_sync[user_id] = now
+
+        cutoff = datetime.utcnow() - timedelta(minutes=30)
+        devices = (
+            Device.query.join(DeviceToken, DeviceToken.device_id == Device.id)
+            .outerjoin(DeviceNetworkProfile, DeviceNetworkProfile.device_id == Device.id)
+            .filter(Device.user_id == user_id)
+            .all()
+        )
+        online_devices = [
+            device
+            for device in devices
+            if device.network_profile
+            and device.network_profile.last_seen
+            and device.network_profile.last_seen >= cutoff
+        ]
+        if not online_devices:
+            return
+
+        union_topics: list[str] = []
+        union_set = set()
+        for device in online_devices:
+            cached = self.latest_settings.get(device.id)
+            if not isinstance(cached, dict):
+                continue
+            raw = cached.get("g_mqtt_whitelist") or cached.get("G_MQTT_WHITELIST")
+            topics = self._normalize_mqtt_whitelist(raw)
+            for topic in topics:
+                if topic not in union_set:
+                    union_set.add(topic)
+                    union_topics.append(topic)
+
+        if not union_topics:
+            return
+
+        for device in online_devices:
+            token_value = device.token.token if device.token else None
+            if not token_value:
+                continue
+            cached = self.latest_settings.get(device.id)
+            if not isinstance(cached, dict):
+                continue
+            current = self._normalize_mqtt_whitelist(
+                cached.get("g_mqtt_whitelist") or cached.get("G_MQTT_WHITELIST")
+            )
+            if set(current) == set(union_topics):
+                continue
+            payload = dict(cached)
+            payload["token"] = token_value
+            payload["g_mqtt_whitelist"] = union_topics
+            self.latest_settings[device.id] = dict(payload)
+            control_topic = self._control_topic_for_device(device)
+            self.client.publish(control_topic, json.dumps(payload), qos=0, retain=False)
 
 
 
