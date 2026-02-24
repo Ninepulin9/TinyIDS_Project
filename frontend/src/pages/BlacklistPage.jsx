@@ -159,6 +159,7 @@ const BlacklistPage = () => {
               const mapped = ipDeviceMap.get(ip)
               return {
                 id: `db-${row?.id ?? ip.toLowerCase()}`,
+                blacklist_id: row?.id ?? null,
                 device_id: mapped?.device_id ?? null,
                 device_name: mapped?.device_name ?? 'Unknown',
                 ip_address: ip,
@@ -464,7 +465,26 @@ const BlacklistPage = () => {
         payload,
         append_token: false,
       })
+      if (entry.blacklist_id) {
+        await api.delete(`/api/blacklist/${entry.blacklist_id}`)
+      } else {
+        try {
+          const { data: blacklistData } = await api.get('/api/blacklist')
+          const rows = Array.isArray(blacklistData) ? blacklistData : []
+          const match = rows.find(
+            (row) =>
+              String(row?.ip_address ?? '').trim().toLowerCase() ===
+              String(entry.ip_address).trim().toLowerCase(),
+          )
+          if (match?.id) {
+            await api.delete(`/api/blacklist/${match.id}`)
+          }
+        } catch {
+          // ignore delete lookup errors
+        }
+      }
       setEntries((prev) => prev.filter((item) => item.id !== entry.id))
+      await loadBlacklist({ forceRequest: true })
       toast.success(`Successfully unblocked ${ipLabel}`)
     } catch (err) {
       const message =
