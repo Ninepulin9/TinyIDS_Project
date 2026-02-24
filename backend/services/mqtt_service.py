@@ -941,6 +941,21 @@ class MQTTService:
                     union_set.add(topic)
                     union_topics.append(topic)
 
+        # Ensure per-device session topics are shared across the fleet.
+        for device in online_devices:
+            code = self._session_code_for_device(device)
+            if not code:
+                continue
+            derived_topics = [
+                f"esp/setting/Control-{code}",
+                f"esp/Alive/Check-{code}",
+                f"esp/alive/setting-{code}",
+            ]
+            for topic in derived_topics:
+                if topic not in union_set:
+                    union_set.add(topic)
+                    union_topics.append(topic)
+
         if not union_topics:
             return
 
