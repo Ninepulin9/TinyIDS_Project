@@ -396,17 +396,23 @@ const BlacklistPage = () => {
   }, [loadBlacklist])
 
   const filteredEntries = useMemo(() => {
+    const connectedIds = new Set(devices.map((device) => String(device.id)))
+    const connectedEntries = entries.filter((entry) => {
+      const entryId = entry.device_id != null ? String(entry.device_id) : null
+      if (!entryId) return false
+      return connectedIds.has(entryId)
+    })
     const filteredByDevice =
       selectedDeviceId === 'all'
-        ? entries
-        : entries.filter((entry) => String(entry.device_id ?? '') === String(selectedDeviceId))
+        ? connectedEntries
+        : connectedEntries.filter((entry) => String(entry.device_id ?? '') === String(selectedDeviceId))
     if (!query.trim()) return filteredByDevice
     const needle = query.trim().toLowerCase()
     return filteredByDevice.filter((entry) => {
       const haystack = `${entry.device_name ?? ''} ${entry.ip_address ?? ''}`.toLowerCase()
       return haystack.includes(needle)
     })
-  }, [entries, query, selectedDeviceId])
+  }, [devices, entries, query, selectedDeviceId])
 
   useEffect(() => {
     setPage(1)
