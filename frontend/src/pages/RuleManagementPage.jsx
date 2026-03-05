@@ -92,15 +92,16 @@ const ruleSections = [
         placeholder: '8, 9, 11',
         type: 'text',
       },
-      {
-        key: 'map_ip_mac_address',
-        label: 'Map IP / MAC Address',
-        helper: 'Map_IP_Mac_address (paired IP and MAC per row)',
-        placeholder: '192.168.1.1 / 00:00:00:00:00:00',
-        type: 'pair',
-      },
-    ],
-  },
+        {
+          key: 'map_ip_mac_address',
+          label: 'Map IP / MAC Address',
+          helper: 'Map_IP_Mac_address (paired IP and MAC per row)',
+          placeholder: '192.168.1.1 / 00:00:00:00:00:00',
+          type: 'pair',
+          fullWidth: true,
+        },
+      ],
+    },
   {
     id: 'whitelist',
     title: 'MQTT Whitelist & Blocked IPs',
@@ -685,8 +686,9 @@ const RuleManagementPage = () => {
       : []
     const inputClassName =
       'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
-    return (
-      <div key={field.key} className={field.fullWidth ? 'sm:col-span-2' : ''}>
+      const spanClass = field.fullWidth ? 'sm:col-span-2 lg:col-span-3' : ''
+      return (
+        <div key={field.key} className={spanClass}>
         <label className="text-sm font-semibold text-slate-700">{field.label}</label>
         <p className="text-xs text-slate-500">{field.helper}</p>
         {field.key === 'map_ip_mac_address' ? (
