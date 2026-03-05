@@ -17,6 +17,7 @@ const DeviceTable = ({
   onToggleLed,
   onDelete,
   onRename,
+  onRetoken,
   togglingId,
   ledStates = {},
   ledTogglingIds = new Set(),
@@ -131,6 +132,7 @@ const DeviceTable = ({
                   onToggleLed={onToggleLed}
                   onDelete={onDelete}
                   onRename={onRename}
+                  onRetoken={onRetoken}
                   toggling={togglingId === device.id}
                   ledState={ledStates?.[device.id]}
                   ledToggling={ledTogglingIds?.has?.(device.id)}

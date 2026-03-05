@@ -25,6 +25,9 @@ const ESPConfigPage = () => {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [renameTarget, setRenameTarget] = useState(null)
   const [renameValue, setRenameValue] = useState('')
+  const [retokenTarget, setRetokenTarget] = useState(null)
+  const [retokenValue, setRetokenValue] = useState('')
+  const [retokeningId, setRetokeningId] = useState(null)
   const [aliveCheckAt, setAliveCheckAt] = useState(null)
   const [ledStates, setLedStates] = useState(() => {
     try {
@@ -138,7 +141,7 @@ const ESPConfigPage = () => {
     )
   }, [])
 
-  const fetchDevices = useCallback(async ({ silent = false } = {}) => {
+  const fetchDevices = useCallback(async ({ silent = false, forceAliveCheck = false } = {}) => {
     if (!silent) {
       setLoading(true)
     }
@@ -148,7 +151,11 @@ const ESPConfigPage = () => {
       const fetchedDevices = Array.isArray(data) ? data : []
       const deduped = dedupeDevices(fetchedDevices)
       setDevices(deduped)
-      sendAliveCheck(deduped, { onlyMissing: true })
+      if (forceAliveCheck) {
+        sendAliveCheck(deduped, { force: true })
+      } else {
+        sendAliveCheck(deduped, { onlyMissing: true })
+      }
       const pendingDevice = findPendingRegistration(deduped)
       if (pendingDevice) {
         const hasIp = Boolean(pendingDevice.ip_address)
@@ -212,7 +219,7 @@ const ESPConfigPage = () => {
   useEffect(() => {
     if (location.pathname !== '/devices') return
     lastAlivePingRef.current = 0
-    fetchDevices()
+    fetchDevices({ forceAliveCheck: true })
     return () => {
       clearRegistrationPoll()
     }
@@ -324,8 +331,8 @@ const ESPConfigPage = () => {
     if (!liveDevices.length) return undefined
     pingIntervalRef.current = setInterval(() => {
       pingDevices()
-      fetchDevices()
-    }, 20000)
+      fetchDevices({ silent: true })
+    }, 60000)
     return () => {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
@@ -473,6 +480,41 @@ const ESPConfigPage = () => {
     }
   }
 
+  const handleRetokenDevice = (device) => {
+    if (!device?.id) return
+    setRetokenTarget(device)
+    setRetokenValue('')
+  }
+
+  const confirmRetokenDevice = async () => {
+    const device = retokenTarget
+    if (!device?.id) return
+    const trimmed = retokenValue.trim()
+    if (!trimmed) {
+      toast.error('Token is required.')
+      return
+    }
+    setRetokeningId(device.id)
+    try {
+      const { data } = await api.put(`/api/devices/${device.id}/token`, { token: trimmed })
+      setDevices((prev) =>
+        prev.map((item) => (item.id === device.id ? { ...item, token: data?.token ?? trimmed } : item)),
+      )
+      toast.success('Token updated')
+      fetchDevices({ silent: true })
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ??
+        err?.message ??
+        'Unable to update token. Please try again.'
+      toast.error(message)
+    } finally {
+      setRetokeningId(null)
+      setRetokenTarget(null)
+      setRetokenValue('')
+    }
+  }
+
   const handleRegisterSubmit = async () => {
     const mac = registerMac.trim()
     const token = registerToken.trim()
@@ -535,6 +577,7 @@ const ESPConfigPage = () => {
           onToggleLed={handleToggleLed}
           onDelete={handleDeleteDevice}
           onRename={handleRenameDevice}
+          onRetoken={handleRetokenDevice}
           togglingId={togglingId}
           ledStates={ledStates}
           ledTogglingIds={ledTogglingIds}
@@ -622,6 +665,46 @@ const ESPConfigPage = () => {
                 className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {retokenTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-900">Update device token</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Set a new token for{' '}
+              <span className="font-semibold">{retokenTarget.device_name ?? retokenTarget.name ?? retokenTarget.id}</span>
+              .
+            </p>
+            <input
+              type="text"
+              value={retokenValue}
+              onChange={(e) => setRetokenValue(e.target.value)}
+              className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
+              placeholder="New token"
+            />
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setRetokenTarget(null)
+                  setRetokenValue('')
+                }}
+                className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmRetokenDevice}
+                disabled={retokeningId === retokenTarget.id}
+                className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {retokeningId === retokenTarget.id ? 'Updating...' : 'Update Token'}
               </button>
             </div>
           </div>

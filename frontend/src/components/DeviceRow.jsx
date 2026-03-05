@@ -17,19 +17,21 @@ const DeviceRow = ({
   onToggleLed,
   onDelete,
   onRename,
+  onRetoken,
   toggling = false,
   ledState,
   ledToggling = false,
 }) => {
   const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
-  const pendingWindowSec = 30
+  const pendingWindowSec = 60
+  const onlineWindowSec = 60
   const requestMoment = aliveCheckAt ? dayjs(aliveCheckAt) : null
   const awaitingAlive =
     Boolean(device?.token) &&
     !lastSeen &&
     requestMoment &&
     dayjs().diff(requestMoment, 'second') <= pendingWindowSec
-  const isOnline = lastSeen ? dayjs().diff(lastSeen, 'minute') <= 30 : false
+  const isOnline = lastSeen ? dayjs().diff(lastSeen, 'second') <= onlineWindowSec : false
   const handleToggle = () => {
     onToggleActive?.(device)
   }
@@ -41,6 +43,9 @@ const DeviceRow = ({
   const ledChecked = ledStateText === 'on'
   const handleDelete = () => {
     onDelete?.(device)
+  }
+  const handleRetoken = () => {
+    onRetoken?.(device)
   }
   return (
     <tr className="border-b border-slate-100 last:border-none hover:bg-slate-50/70 transition">
@@ -79,7 +84,7 @@ const DeviceRow = ({
           )}
         </Badge>
         <p className="mt-1 text-xs text-slate-400">
-          {awaitingAlive ? 'Waiting for alive response' : 'Alive check within 30 min'}
+          {awaitingAlive ? 'Waiting for alive response' : 'Alive check within 1 min'}
         </p>
       </td>
       <td className="px-4 py-4 align-middle text-sm text-slate-600">
@@ -140,6 +145,13 @@ const DeviceRow = ({
       </td>
       <td className="px-4 py-4 align-middle">
         <div className="flex items-center justify-center gap-2 whitespace-nowrap">
+          <button
+            type="button"
+            className="rounded-full border border-sky-500 bg-white px-4 py-2 text-xs font-semibold text-sky-600 transition hover:bg-sky-50 hover:text-sky-700"
+            onClick={handleRetoken}
+          >
+            Re-token
+          </button>
           <button
             type="button"
             className="rounded-full border border-rose-500 bg-white px-4 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 hover:text-rose-700"

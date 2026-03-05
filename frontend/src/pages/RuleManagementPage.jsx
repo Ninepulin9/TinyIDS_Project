@@ -244,7 +244,7 @@ const RuleManagementPage = () => {
     pingIntervalRef.current = setInterval(() => {
       pingDevices()
       loadDevices()
-    }, 20000)
+    }, 60000)
     return () => {
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
@@ -635,14 +635,15 @@ const RuleManagementPage = () => {
 
   const renderOnlineStatus = (device) => {
     const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
-    const pendingWindowSec = 30
+    const pendingWindowSec = 60
+    const onlineWindowSec = 60
     const requestMoment = aliveCheckAt ? dayjs(aliveCheckAt) : null
     const awaitingAlive =
       Boolean(device?.token) &&
       !lastSeen &&
       requestMoment &&
       dayjs().diff(requestMoment, 'second') <= pendingWindowSec
-    const isOnline = lastSeen ? dayjs().diff(lastSeen, 'minute') <= 30 : false
+    const isOnline = lastSeen ? dayjs().diff(lastSeen, 'second') <= onlineWindowSec : false
 
     return (
       <div className="flex flex-col">
@@ -658,12 +659,12 @@ const RuleManagementPage = () => {
             'Offline'
           )}
         </Badge>
-        <span className="mt-1 text-xs text-slate-400">
-          {awaitingAlive ? 'Waiting for alive response' : 'Alive check within 30 min'}
-        </span>
-      </div>
-    )
-  }
+          <span className="mt-1 text-xs text-slate-400">
+            {awaitingAlive ? 'Waiting for alive response' : 'Alive check within 1 min'}
+          </span>
+        </div>
+      )
+    }
 
   const toggleSection = (id) => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
