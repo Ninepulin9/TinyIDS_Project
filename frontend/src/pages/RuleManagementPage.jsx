@@ -162,6 +162,7 @@ const RuleManagementPage = () => {
   const [loadingRules, setLoadingRules] = useState(false)
   const [awaitingToken, setAwaitingToken] = useState('')
   const [aliveCheckAt, setAliveCheckAt] = useState(null)
+  const [uiNow, setUiNow] = useState(Date.now())
   const pollRef = useRef({ timer: null, attempts: 0 })
   const requestMetaRef = useRef({ token: '', requestedAt: 0 })
   const lastSettingsRequestRef = useRef({ token: '', time: 0 })
@@ -194,6 +195,13 @@ const RuleManagementPage = () => {
   useEffect(() => {
     loadDevices()
   }, [loadDevices])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setUiNow(Date.now())
+    }, 10000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     const socket = getSocket()
@@ -634,6 +642,7 @@ const RuleManagementPage = () => {
   const deviceRows = useMemo(() => devices, [devices])
 
   const renderOnlineStatus = (device) => {
+    const nowMoment = dayjs(uiNow)
     const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
     const pendingWindowSec = 60
     const onlineWindowSec = 60
@@ -642,8 +651,8 @@ const RuleManagementPage = () => {
       Boolean(device?.token) &&
       !lastSeen &&
       requestMoment &&
-      dayjs().diff(requestMoment, 'second') <= pendingWindowSec
-    const isOnline = lastSeen ? dayjs().diff(lastSeen, 'second') <= onlineWindowSec : false
+      nowMoment.diff(requestMoment, 'second') <= pendingWindowSec
+    const isOnline = lastSeen ? nowMoment.diff(lastSeen, 'second') <= onlineWindowSec : false
 
     return (
       <div className="flex flex-col">

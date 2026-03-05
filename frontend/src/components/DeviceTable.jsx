@@ -22,6 +22,7 @@ const DeviceTable = ({
   ledStates = {},
   ledTogglingIds = new Set(),
   aliveCheckAt,
+  nowTs,
   showHeader = true,
   withContainer = true,
 }) => {
@@ -136,6 +137,7 @@ const DeviceTable = ({
                   toggling={togglingId === device.id}
                   ledState={ledStates?.[device.id]}
                   ledToggling={ledTogglingIds?.has?.(device.id)}
+                  nowTs={nowTs}
                 />
               ))}
           </tbody>

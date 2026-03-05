@@ -29,6 +29,7 @@ const ESPConfigPage = () => {
   const [retokenValue, setRetokenValue] = useState('')
   const [retokeningId, setRetokeningId] = useState(null)
   const [aliveCheckAt, setAliveCheckAt] = useState(null)
+  const [uiNow, setUiNow] = useState(Date.now())
   const [ledStates, setLedStates] = useState(() => {
     try {
       const stored = localStorage.getItem('tinyids:ledStates')
@@ -201,6 +202,13 @@ const ESPConfigPage = () => {
   useEffect(() => {
     devicesRef.current = devices
   }, [devices])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setUiNow(Date.now())
+    }, 10000)
+    return () => clearInterval(timer)
+  }, [])
 
   const startRegistrationPoll = useCallback(() => {
     clearRegistrationPoll()
@@ -500,7 +508,19 @@ const ESPConfigPage = () => {
       setDevices((prev) =>
         prev.map((item) => (item.id === device.id ? { ...item, token: data?.token ?? trimmed } : item)),
       )
-      toast.success('Token updated')
+      const macAddress = String(device?.mac_address ?? '').trim()
+      if (macAddress) {
+        await api.post('/api/devices/discover', {
+          mac_address: macAddress,
+          token: trimmed,
+        })
+        pendingRegistrationRef.current = { mac: macAddress, token: trimmed }
+        startRegistrationPoll()
+        toast.success('Token updated and re-register requested')
+      } else {
+        toast.success('Token updated')
+        toast.error('MAC address missing; cannot re-register this device.')
+      }
       fetchDevices({ silent: true })
     } catch (err) {
       const message =
@@ -582,6 +602,7 @@ const ESPConfigPage = () => {
           ledStates={ledStates}
           ledTogglingIds={ledTogglingIds}
           aliveCheckAt={aliveCheckAt}
+          nowTs={uiNow}
           withContainer={false}
         />
       </section>

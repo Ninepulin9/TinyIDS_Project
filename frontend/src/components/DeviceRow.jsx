@@ -21,7 +21,9 @@ const DeviceRow = ({
   toggling = false,
   ledState,
   ledToggling = false,
+  nowTs,
 }) => {
+  const nowMoment = nowTs ? dayjs(nowTs) : dayjs()
   const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
   const pendingWindowSec = 60
   const onlineWindowSec = 60
@@ -30,8 +32,8 @@ const DeviceRow = ({
     Boolean(device?.token) &&
     !lastSeen &&
     requestMoment &&
-    dayjs().diff(requestMoment, 'second') <= pendingWindowSec
-  const isOnline = lastSeen ? dayjs().diff(lastSeen, 'second') <= onlineWindowSec : false
+    nowMoment.diff(requestMoment, 'second') <= pendingWindowSec
+  const isOnline = lastSeen ? nowMoment.diff(lastSeen, 'second') <= onlineWindowSec : false
   const handleToggle = () => {
     onToggleActive?.(device)
   }
