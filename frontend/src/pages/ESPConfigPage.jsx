@@ -26,6 +26,15 @@ const ESPConfigPage = () => {
   const [renameTarget, setRenameTarget] = useState(null)
   const [renameValue, setRenameValue] = useState('')
   const [aliveCheckAt, setAliveCheckAt] = useState(null)
+  const [ledStates, setLedStates] = useState(() => {
+    try {
+      const stored = localStorage.getItem('tinyids:ledStates')
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  })
+  const [ledTogglingIds, setLedTogglingIds] = useState(new Set())
   const registrationPollLimitRef = useRef(40)
   const pingIntervalRef = useRef(null)
   const initialPingRef = useRef(false)
@@ -33,7 +42,25 @@ const ESPConfigPage = () => {
   const registrationPollRef = useRef({ timer: null, attempts: 0 })
   const pendingRegistrationRef = useRef({ mac: '', token: '' })
   const ipRefreshRef = useRef(0)
+  const devicesRef = useRef([])
   const location = useLocation()
+
+  const persistLedStates = (next) => {
+    try {
+      localStorage.setItem('tinyids:ledStates', JSON.stringify(next))
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  const setLedStateForDevice = useCallback((deviceId, nextState) => {
+    if (!deviceId) return
+    setLedStates((prev) => {
+      const next = { ...prev, [deviceId]: nextState }
+      persistLedStates(next)
+      return next
+    })
+  }, [])
 
   const dedupeDevices = (list) => {
     const byKey = new Map()
@@ -164,6 +191,10 @@ const ESPConfigPage = () => {
     }
   }, [clearRegistrationPoll, findPendingRegistration, sendAliveCheck])
 
+  useEffect(() => {
+    devicesRef.current = devices
+  }, [devices])
+
   const startRegistrationPoll = useCallback(() => {
     clearRegistrationPoll()
     registrationPollRef.current.attempts = 0
@@ -196,6 +227,38 @@ const ESPConfigPage = () => {
       const data = payload?.payload ?? payload
       if (!data || typeof data !== 'object') return
       const topic = String(data._mqtt_topic ?? '').toLowerCase()
+      if (topic === 'test/data' || topic === 'test/data/led' || topic.startsWith('test/data-')) {
+        const rawMessage =
+          data.message ??
+          data.status ??
+          data.state ??
+          data.led ??
+          data.payload ??
+          ''
+        const text = String(rawMessage).trim().toLowerCase()
+        const isOn =
+          text.includes('led_on') ||
+          text.includes('led on') ||
+          text === 'on' ||
+          text.includes('led is on')
+        const isOff =
+          text.includes('led_off') ||
+          text.includes('led off') ||
+          text === 'off' ||
+          text.includes('led is off')
+        const tokenMatch = String(rawMessage).match(/token[:\s-]*([a-z0-9_-]+)/i)
+        const token =
+          String(data.token ?? '').trim() ||
+          (tokenMatch ? tokenMatch[1] : '').trim()
+        if (token && (isOn || isOff)) {
+          const match = devicesRef.current.find(
+            (device) => String(device?.token ?? '').trim() === token,
+          )
+          if (match) {
+            setLedStateForDevice(match.id, isOn ? 'on' : 'off')
+          }
+        }
+      }
       if (topic === 'esp/alive' || data.ip || data.ip_address || data.device_ip) {
         fetchDevices({ silent: true })
       }
@@ -211,7 +274,42 @@ const ESPConfigPage = () => {
       socket.off('log:new', handleLogNew)
       socket.off('device:updated', handleDeviceUpdated)
     }
-  }, [fetchDevices])
+  }, [fetchDevices, setLedStateForDevice])
+
+  const handleToggleLed = async (device, nextChecked) => {
+    if (!device?.id) return
+    if (!device?.token) {
+      toast.error('This device has no token; cannot control LED.')
+      return
+    }
+    const nextState = nextChecked ? 'on' : 'off'
+    const previousState = ledStates?.[device.id]
+    setLedStateForDevice(device.id, nextState)
+    setLedTogglingIds((prev) => {
+      const next = new Set(prev)
+      next.add(device.id)
+      return next
+    })
+    try {
+      await api.post(`/api/devices/${device.id}/publish`, {
+        topic_base: 'test/data',
+        message: nextChecked ? `LED_ON-${device.token}` : `LED_OFF-${device.token}`,
+        append_token: false,
+      })
+      toast.success(`LED ${nextChecked ? 'ON' : 'OFF'} sent`)
+    } catch (err) {
+      setLedStateForDevice(device.id, previousState ?? 'off')
+      const message =
+        err?.response?.data?.message ?? err?.message ?? 'Unable to control LED.'
+      toast.error(message)
+    } finally {
+      setLedTogglingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(device.id)
+        return next
+      })
+    }
+  }
 
   const pingDevices = useCallback(async () => {
     await sendAliveCheck(devices)
@@ -434,9 +532,12 @@ const ESPConfigPage = () => {
           onEditWifi={setSelectedWifiDevice}
           onEditMqtt={setSelectedMqttDevice}
           onToggleActive={handleToggleActive}
+          onToggleLed={handleToggleLed}
           onDelete={handleDeleteDevice}
           onRename={handleRenameDevice}
           togglingId={togglingId}
+          ledStates={ledStates}
+          ledTogglingIds={ledTogglingIds}
           aliveCheckAt={aliveCheckAt}
           withContainer={false}
         />

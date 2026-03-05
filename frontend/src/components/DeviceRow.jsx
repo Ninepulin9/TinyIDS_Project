@@ -8,7 +8,19 @@ const statusVariant = (status) => {
   return status.toLowerCase() === 'connected' || status.toLowerCase() === 'online' ? 'success' : 'danger'
 }
 
-const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActive, onDelete, onRename, toggling = false }) => {
+const DeviceRow = ({
+  device,
+  aliveCheckAt,
+  onEditWifi,
+  onEditMqtt,
+  onToggleActive,
+  onToggleLed,
+  onDelete,
+  onRename,
+  toggling = false,
+  ledState,
+  ledToggling = false,
+}) => {
   const lastSeen = device?.last_seen ? dayjs(device.last_seen) : null
   const pendingWindowSec = 30
   const requestMoment = aliveCheckAt ? dayjs(aliveCheckAt) : null
@@ -21,6 +33,12 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
   const handleToggle = () => {
     onToggleActive?.(device)
   }
+  const handleLedToggle = (nextChecked) => {
+    onToggleLed?.(device, nextChecked)
+  }
+  const ledStateText = String(ledState ?? '').toLowerCase()
+  const ledKnown = ledStateText === 'on' || ledStateText === 'off'
+  const ledChecked = ledStateText === 'on'
   const handleDelete = () => {
     onDelete?.(device)
   }
@@ -106,6 +124,19 @@ const DeviceRow = ({ device, aliveCheckAt, onEditWifi, onEditMqtt, onToggleActiv
           disabled={toggling}
           label={`Toggle ${device.device_name} alert mode`}
         />
+      </td>
+      <td className="px-4 py-4 align-middle">
+        <div className="flex flex-col items-center gap-1">
+          <Toggle
+            checked={ledChecked}
+            onChange={handleLedToggle}
+            disabled={ledToggling}
+            label={`Toggle ${device.device_name} LED`}
+          />
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            {ledKnown ? (ledChecked ? 'LED ON' : 'LED OFF') : 'LED --'}
+          </span>
+        </div>
       </td>
       <td className="px-4 py-4 align-middle">
         <div className="flex items-center justify-center gap-2 whitespace-nowrap">

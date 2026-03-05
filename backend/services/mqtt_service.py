@@ -905,6 +905,12 @@ class MQTTService:
             return f"esp/alive/setting-{code}"
         return "esp/alive/setting"
 
+    def _data_topic_for_device(self, device: Device) -> str:
+        code = self._session_code_for_device(device)
+        if code:
+            return f"test/data-{code}"
+        return "test/data"
+
     def _normalize_mqtt_whitelist(self, value) -> list[str]:
         if value is None:
             return []

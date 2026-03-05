@@ -22,7 +22,7 @@ const defaultRuleState = {
   cfg_http_bf_block_time: '',
   cfg_deauth_cooldown_ms: '',
   g_trusted_channel: '',
-  g_target_trusted_mac: '',
+  map_ip_mac_address: [],
   g_mqtt_whitelist: '',
   blocked_ips: '',
   xss_patterns: '',
@@ -81,8 +81,8 @@ const ruleSections = [
   },
   {
     id: 'trust',
-    title: 'Trusted Channels & MACs',
-    subtitle: 'g_trusted_channel / g_target_trusted_mac',
+    title: 'Trusted Channels & IP/MAC Map',
+    subtitle: 'g_trusted_channel / Map_IP_Mac_address',
     description: 'Comma separated lists of Wi‑Fi channels and MAC addresses that are allowed.',
     fields: [
       {
@@ -93,11 +93,11 @@ const ruleSections = [
         type: 'text',
       },
       {
-        key: 'g_target_trusted_mac',
-        label: 'Trusted MACs',
-        helper: 'g_target_trusted_mac (comma-separated)',
-        placeholder: '00:00:00:00:00:00',
-        type: 'text',
+        key: 'map_ip_mac_address',
+        label: 'Map IP / MAC Address',
+        helper: 'Map_IP_Mac_address (paired IP and MAC per row)',
+        placeholder: '192.168.1.1 / 00:00:00:00:00:00',
+        type: 'pair',
       },
     ],
   },
@@ -290,12 +290,57 @@ const RuleManagementPage = () => {
     setRuleErrors((prev) => ({ ...prev, [field]: undefined }))
   }
 
+  const updateIpMacPair = (index, key, value) => {
+    setRuleValues((prev) => {
+      const next = Array.isArray(prev.map_ip_mac_address)
+        ? [...prev.map_ip_mac_address]
+        : []
+      if (!next[index]) {
+        next[index] = { ip: '', mac: '' }
+      }
+      next[index] = { ...next[index], [key]: value }
+      return { ...prev, map_ip_mac_address: next }
+    })
+    setRuleErrors((prev) => ({ ...prev, map_ip_mac_address: undefined }))
+  }
+
+  const addIpMacPair = () => {
+    setRuleValues((prev) => ({
+      ...prev,
+      map_ip_mac_address: [
+        ...(Array.isArray(prev.map_ip_mac_address) ? prev.map_ip_mac_address : []),
+        { ip: '', mac: '' },
+      ],
+    }))
+  }
+
+  const removeIpMacPair = (index) => {
+    setRuleValues((prev) => {
+      const next = Array.isArray(prev.map_ip_mac_address)
+        ? [...prev.map_ip_mac_address]
+        : []
+      next.splice(index, 1)
+      return { ...prev, map_ip_mac_address: next }
+    })
+    setRuleErrors((prev) => ({ ...prev, map_ip_mac_address: undefined }))
+  }
+
   const coerceList = (value) => {
     if (Array.isArray(value)) {
       return value.map((item) => String(item)).join(', ')
     }
     if (value == null) return ''
     return String(value)
+  }
+
+  const coerceIpMacPairs = (value) => {
+    if (!Array.isArray(value)) return []
+    return value
+      .map((entry) => ({
+        ip: String(entry?.ip ?? '').trim(),
+        mac: String(entry?.mac ?? '').trim(),
+      }))
+      .filter((entry) => entry.ip || entry.mac)
   }
 
   const mapPayloadToRules = (payload, fallbackToken) => ({
@@ -313,7 +358,11 @@ const RuleManagementPage = () => {
     cfg_http_bf_block_time: payload?.CFG_HTTP_BF_BLOCK_TIME ?? payload?.cfg_http_bf_block_time ?? '',
     cfg_deauth_cooldown_ms: payload?.CFG_DEAUTH_COOLDOWN_MS ?? payload?.cfg_deauth_cooldown_ms ?? '',
     g_trusted_channel: coerceList(payload?.g_trusted_channel ?? payload?.G_TRUSTED_CHANNEL),
-    g_target_trusted_mac: coerceList(payload?.g_target_trusted_mac ?? payload?.G_TARGET_TRUSTED_MAC),
+    map_ip_mac_address: coerceIpMacPairs(
+      payload?.Map_IP_Mac_address ??
+        payload?.map_ip_mac_address ??
+        payload?.MAP_IP_MAC_ADDRESS,
+    ),
     g_mqtt_whitelist: coerceList(payload?.g_mqtt_whitelist ?? payload?.G_MQTT_WHITELIST),
     blocked_ips: coerceList(payload?.blocked_ips ?? payload?.BLOCKED_IPS),
     xss_patterns: coerceList(payload?.xss_patterns ?? payload?.XSS_PATTERNS),
@@ -353,6 +402,17 @@ const RuleManagementPage = () => {
     if (!ruleValues.token.trim()) errors.token = 'Token is required'
     if (!Number(ruleValues.cfg_rate_limit_count)) errors.cfg_rate_limit_count = 'Required'
     if (!Number(ruleValues.cfg_rate_limit_seconds)) errors.cfg_rate_limit_seconds = 'Required'
+    const pairs = Array.isArray(ruleValues.map_ip_mac_address)
+      ? ruleValues.map_ip_mac_address
+      : []
+    const hasInvalidPair = pairs.some((pair) => {
+      const ip = String(pair?.ip ?? '').trim()
+      const mac = String(pair?.mac ?? '').trim()
+      return (ip && !mac) || (!ip && mac)
+    })
+    if (hasInvalidPair) {
+      errors.map_ip_mac_address = 'Each row must include both IP and MAC.'
+    }
     return errors
   }
 
@@ -394,7 +454,12 @@ const RuleManagementPage = () => {
       CFG_DEAUTH_COOLDOWN_MS:
         ruleValues.cfg_deauth_cooldown_ms === '' ? undefined : Number(ruleValues.cfg_deauth_cooldown_ms),
       g_trusted_channel: toArray(ruleValues.g_trusted_channel).map((x) => Number(x)).filter((x) => !Number.isNaN(x)),
-      g_target_trusted_mac: toArray(ruleValues.g_target_trusted_mac),
+      Map_IP_Mac_address: (Array.isArray(ruleValues.map_ip_mac_address) ? ruleValues.map_ip_mac_address : [])
+        .map((pair) => ({
+          ip: String(pair?.ip ?? '').trim(),
+          mac: String(pair?.mac ?? '').trim(),
+        }))
+        .filter((pair) => pair.ip && pair.mac),
       g_mqtt_whitelist: toArray(ruleValues.g_mqtt_whitelist),
       blocked_ips: toArray(ruleValues.blocked_ips),
       xss_patterns: toArray(ruleValues.xss_patterns),
@@ -607,7 +672,6 @@ const RuleManagementPage = () => {
     const inputType = field.type === 'number' ? 'number' : 'text'
     const listFieldKeys = new Set([
       'g_trusted_channel',
-      'g_target_trusted_mac',
       'g_mqtt_whitelist',
       'blocked_ips',
       'xss_patterns',
@@ -625,7 +689,55 @@ const RuleManagementPage = () => {
       <div key={field.key} className={field.fullWidth ? 'sm:col-span-2' : ''}>
         <label className="text-sm font-semibold text-slate-700">{field.label}</label>
         <p className="text-xs text-slate-500">{field.helper}</p>
-        {isListField ? (
+        {field.key === 'map_ip_mac_address' ? (
+          <div className="mt-3 space-y-3">
+            {(Array.isArray(ruleValues.map_ip_mac_address) ? ruleValues.map_ip_mac_address : []).map(
+              (pair, index) => (
+                <div
+                  key={`pair-${index}`}
+                  className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2"
+                >
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">IP Address</label>
+                    <input
+                      type="text"
+                      value={pair?.ip ?? ''}
+                      onChange={(e) => updateIpMacPair(index, 'ip', e.target.value)}
+                      className={inputClassName}
+                      placeholder="192.168.1.1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">MAC Address</label>
+                    <input
+                      type="text"
+                      value={pair?.mac ?? ''}
+                      onChange={(e) => updateIpMacPair(index, 'mac', e.target.value)}
+                      className={inputClassName}
+                      placeholder="00:00:00:00:00:00"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <button
+                      type="button"
+                      onClick={() => removeIpMacPair(index)}
+                      className="rounded-full border border-rose-200 bg-white px-3 py-1 text-xs font-semibold text-rose-500 transition hover:border-rose-300 hover:bg-rose-50"
+                    >
+                      Remove pair
+                    </button>
+                  </div>
+                </div>
+              ),
+            )}
+            <button
+              type="button"
+              onClick={addIpMacPair}
+              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              Add IP/MAC Pair
+            </button>
+          </div>
+        ) : isListField ? (
           <textarea
             rows={field.key === 'xss_patterns' ? 3 : 2}
             value={ruleValues[field.key]}

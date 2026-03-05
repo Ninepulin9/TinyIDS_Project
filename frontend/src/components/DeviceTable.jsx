@@ -14,9 +14,12 @@ const DeviceTable = ({
   onEditWifi,
   onEditMqtt,
   onToggleActive,
+  onToggleLed,
   onDelete,
   onRename,
   togglingId,
+  ledStates = {},
+  ledTogglingIds = new Set(),
   aliveCheckAt,
   showHeader = true,
   withContainer = true,
@@ -56,6 +59,7 @@ const DeviceTable = ({
               <th className="px-4 py-3 hidden">Wi-Fi</th>
               <th className="px-4 py-3 hidden">MQTT</th>
               <th className="px-4 py-3">Alert Mode</th>
+              <th className="px-4 py-3">LED Check</th>
               <th className="px-4 py-3 text-center">Actions</th>
             </tr>
           </thead>
@@ -87,12 +91,15 @@ const DeviceTable = ({
                   <td className="px-4 py-4">
                     <div className="ml-auto h-8 w-16 rounded-full bg-slate-200" />
                   </td>
+                  <td className="px-4 py-4">
+                    <div className="h-6 w-12 rounded-full bg-slate-200" />
+                  </td>
                 </tr>
               ))}
 
             {!loading && error && (
               <tr>
-                <td colSpan="8" className="px-4 py-6 text-center text-sm text-rose-500">
+                <td colSpan="9" className="px-4 py-6 text-center text-sm text-rose-500">
                   <div className="flex flex-col items-center gap-3">
                     <p>{error}</p>
                     <Button variant="outline" size="sm" onClick={onRetry}>
@@ -105,7 +112,7 @@ const DeviceTable = ({
 
             {!loading && !error && devices.length === 0 && (
               <tr>
-                <td colSpan="8" className="px-4 py-8 text-center text-sm text-slate-500">
+                <td colSpan="9" className="px-4 py-8 text-center text-sm text-slate-500">
                   No devices match your filters. Try adjusting your search or add a new device.
                 </td>
               </tr>
@@ -121,9 +128,12 @@ const DeviceTable = ({
                   onEditWifi={onEditWifi}
                   onEditMqtt={onEditMqtt}
                   onToggleActive={onToggleActive}
+                  onToggleLed={onToggleLed}
                   onDelete={onDelete}
                   onRename={onRename}
                   toggling={togglingId === device.id}
+                  ledState={ledStates?.[device.id]}
+                  ledToggling={ledTogglingIds?.has?.(device.id)}
                 />
               ))}
           </tbody>

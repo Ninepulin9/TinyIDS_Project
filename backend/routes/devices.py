@@ -291,6 +291,8 @@ def publish_to_device(device_id: int):
             topic = mqtt_service._alive_topic_for_device(device)
         elif token_value and topic_base.lower() == "esp/alive/setting":
             topic = mqtt_service._alive_setting_topic_for_device(device)
+        elif token_value and topic_base.lower() in {"test/data", "test/data/led"}:
+            topic = mqtt_service._data_topic_for_device(device)
         else:
             topic = topic_base
 
