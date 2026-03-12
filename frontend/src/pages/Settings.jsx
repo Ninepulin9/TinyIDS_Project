@@ -82,6 +82,12 @@ const Settings = () => {
     try {
       await api.put('/api/settings/system', systemSettings)
       toast.success('System settings saved')
+      try {
+        localStorage.setItem('tinyids_system_settings', JSON.stringify(systemSettings))
+      } catch {
+        // ignore storage errors
+      }
+      window.dispatchEvent(new CustomEvent('system:settings-updated', { detail: systemSettings }))
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to save system settings. Please try again.'))
     } finally {

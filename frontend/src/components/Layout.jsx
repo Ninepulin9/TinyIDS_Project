@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { ChevronRight, GaugeCircle, ListChecks, Shield, SlidersHorizontal, UserCircle2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import wifiIcon from '../assets/wi-fi-icon.png'
 import profileIcon from '../assets/profile.png'
 import controlIcon from '../assets/control.png'
 import dashboardIcon from '../assets/dashboard.png'
 import rule from '../assets/find.png'
+import api from '../lib/api'
+import { getSocket } from '../lib/socket'
 const sections = [
   {
     title: 'Navigation',
@@ -47,6 +50,74 @@ const Layout = ({ onLogout, user }) => {
   const location = useLocation()
   const subtitle = routeSubtitles[location.pathname] ?? 'TinyIDS Platform'
   const [showConfirm, setShowConfirm] = useState(false)
+  const [attackNotifyEnabled, setAttackNotifyEnabled] = useState(true)
+  const lastToastRef = useRef({ key: '', at: 0 })
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('tinyids_system_settings')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (typeof parsed?.attack_notifications === 'boolean') {
+          setAttackNotifyEnabled(parsed.attack_notifications)
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+    const loadSettings = async () => {
+      try {
+        const { data } = await api.get('/api/settings/system')
+        if (typeof data?.attack_notifications === 'boolean') {
+          setAttackNotifyEnabled(data.attack_notifications)
+        }
+      } catch {
+        // ignore fetch errors
+      }
+    }
+    loadSettings()
+  }, [])
+
+  useEffect(() => {
+    const handleSettingsUpdated = (event) => {
+      const next = event?.detail
+      if (typeof next?.attack_notifications === 'boolean') {
+        setAttackNotifyEnabled(next.attack_notifications)
+      }
+    }
+    window.addEventListener('system:settings-updated', handleSettingsUpdated)
+    return () => window.removeEventListener('system:settings-updated', handleSettingsUpdated)
+  }, [])
+
+  useEffect(() => {
+    const socket = getSocket()
+    const handleLogNew = (payload) => {
+      if (!attackNotifyEnabled) return
+      const data = payload?.payload ?? payload
+      if (!data || typeof data !== 'object') return
+      const topic = String(data._mqtt_topic ?? '').toLowerCase()
+      if (topic !== 'esp/alert') return
+      const message =
+        data.alert_msg ||
+        data.message ||
+        data.type ||
+        'Intrusion detected'
+      const sourceIp = data.source_ip || data.alert_ip || data.ip
+      const deviceName = data.device_name || data.device || data.device_name
+      const toastText = `${message}${sourceIp ? ` (${sourceIp})` : ''}${deviceName ? ` - ${deviceName}` : ''}`
+      const now = Date.now()
+      const key = `${message}-${sourceIp ?? ''}-${deviceName ?? ''}`
+      if (lastToastRef.current.key === key && now - lastToastRef.current.at < 3000) {
+        return
+      }
+      lastToastRef.current = { key, at: now }
+      toast.error(toastText)
+    }
+    socket.on('log:new', handleLogNew)
+    return () => {
+      socket.off('log:new', handleLogNew)
+    }
+  }, [attackNotifyEnabled])
 
   return (
   <div className="flex min-h-screen bg-slate-100 text-slate-900">

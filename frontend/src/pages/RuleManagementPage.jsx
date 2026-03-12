@@ -275,16 +275,19 @@ const RuleManagementPage = () => {
     setSelectedDevice(device)
     setRuleErrors({})
     setDrawerOpen(true)
-    setLoadingRules(true)
     // Pre-fill token from device
+    const deviceToken = device?.token ?? ''
     setRuleValues((prev) => ({
       ...defaultRuleState,
-      token: device?.token ?? '',
+      token: deviceToken,
     }))
-    setLoadingRules(false)
-    if (device?.token) {
-      handleLoadFromDevice(device)
+    if (!deviceToken) {
+      setLoadingRules(false)
+      toast.error('No token found for this device.')
+      return
     }
+    setLoadingRules(true)
+    handleLoadFromDevice(device)
   }
 
   const closeDrawer = () => {
@@ -503,13 +506,30 @@ const RuleManagementPage = () => {
       return
     }
     const now = Date.now()
-    if (
-      !force &&
-      lastSettingsRequestRef.current.token === deviceToken &&
-      now - lastSettingsRequestRef.current.time < requestThrottleMs
-    ) {
-      return
-    }
+      if (
+        !force &&
+        lastSettingsRequestRef.current.token === deviceToken &&
+        now - lastSettingsRequestRef.current.time < requestThrottleMs
+      ) {
+        setLoadingRules(true)
+        setAwaitingToken(deviceToken)
+        stopPolling()
+        pollRef.current.timer = setInterval(async () => {
+          pollRef.current.attempts += 1
+          if (pollRef.current.attempts >= maxPollAttempts) {
+            stopPolling()
+            setAwaitingToken('')
+            setLoadingRules(false)
+            toast.error('Device did not respond in time.')
+            return
+          }
+          const done = await pollSettingsOnce(deviceToken, targetDevice.id)
+          if (done) {
+            stopPolling()
+          }
+        }, pollIntervalMs)
+        return
+      }
     lastSettingsRequestRef.current = { token: deviceToken, time: now }
     requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
     setLoadingRules(true)
