@@ -97,7 +97,12 @@ const Layout = ({ onLogout, user }) => {
       incoming?.device_name ||
       payload.device ||
       incoming?.device
-    const toastText = `${message}${sourceIp ? ` (${sourceIp})` : ''}${deviceName ? ` - ${deviceName}` : ''}`
+    let title = payload.type || incoming?.type || 'Alert'
+    if (!String(title).toLowerCase().includes('alert')) {
+      title = `${title} Alert`
+    }
+    const details = `${message}${sourceIp ? ` (${sourceIp})` : ''}${deviceName ? ` - ${deviceName}` : ''}`
+    const toastText = `${title}\n${details}`
     const now = Date.now()
     const key = `${message}-${sourceIp ?? ''}-${deviceName ?? ''}`
     if (lastToastRef.current.key === key && now - lastToastRef.current.at < 3000) {
