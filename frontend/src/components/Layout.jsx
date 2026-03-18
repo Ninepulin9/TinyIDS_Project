@@ -132,7 +132,7 @@ const Layout = ({ onLogout, user }) => {
             </span>
             <span>{toastTitle}</span>
           </div>
-          <div className="mt-1 text-xs text-slate-600">{toastDetails}</div>
+          <div className="mt-1 text-xs text-slate-800">{toastDetails}</div>
         </div>
       ),
       { duration: 4000 },

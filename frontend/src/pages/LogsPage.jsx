@@ -625,7 +625,7 @@ const LogsPage = () => {
       const rightTime = dayjs(right.timestamp).valueOf()
       return sortDesc ? rightTime - leftTime : leftTime - rightTime
     })
-    const windowMs = 10 * 60 * 1000
+    const windowMs = 5 * 60 * 1000
     const grouped = []
     for (const log of ordered) {
       const timestamp = dayjs(log.timestamp).valueOf()
