@@ -102,14 +102,41 @@ const Layout = ({ onLogout, user }) => {
       title = `${title} Alert`
     }
     const details = `${message}${sourceIp ? ` (${sourceIp})` : ''}${deviceName ? ` - ${deviceName}` : ''}`
-    const toastText = `${title}\n${details}`
+    const toastTitle = title
+    const toastDetails = details
     const now = Date.now()
     const key = `${message}-${sourceIp ?? ''}-${deviceName ?? ''}`
     if (lastToastRef.current.key === key && now - lastToastRef.current.at < 3000) {
       return
     }
     lastToastRef.current = { key, at: now }
-    toast.error(toastText)
+    toast.custom(
+      (t) => (
+        <div
+          className={`w-full max-w-sm rounded-xl bg-white px-4 py-3 text-slate-900 shadow-xl ring-1 ring-slate-200 ${
+            t.visible ? 'animate-enter' : 'animate-leave'
+          }`}
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <span className="inline-flex h-5 w-5 items-center justify-center">
+              <svg
+                viewBox="0 0 24 24"
+                className="h-5 w-5 text-amber-500"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M12 3.2 1.7 21.1c-.3.5.1 1.1.7 1.1h19.2c.6 0 1-.6.7-1.1L12 3.2z" />
+                <rect x="11" y="9" width="2" height="7" rx="1" fill="#fff" />
+                <rect x="11" y="17.5" width="2" height="2" rx="1" fill="#fff" />
+              </svg>
+            </span>
+            <span>{toastTitle}</span>
+          </div>
+          <div className="mt-1 text-xs text-slate-600">{toastDetails}</div>
+        </div>
+      ),
+      { duration: 4000 },
+    )
   }
 
   useEffect(() => {
