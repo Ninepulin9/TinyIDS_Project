@@ -95,15 +95,20 @@ const Layout = ({ onLogout, user }) => {
       if (!attackNotifyEnabled) return
       const data = payload?.payload ?? payload
       if (!data || typeof data !== 'object') return
-      const topic = String(data._mqtt_topic ?? '').toLowerCase()
-      if (topic !== 'esp/alert') return
+      const payloadData = data.payload && typeof data.payload === 'object' ? data.payload : data
+      const topic = String(data._mqtt_topic ?? payloadData._mqtt_topic ?? '').toLowerCase()
+      const typeLabel = String(payloadData.type ?? data.type ?? '').toLowerCase()
+      if (topic !== 'esp/alert' && !typeLabel.includes('alert')) return
       const message =
+        payloadData.alert_msg ||
         data.alert_msg ||
+        payloadData.message ||
         data.message ||
+        payloadData.type ||
         data.type ||
         'Intrusion detected'
-      const sourceIp = data.source_ip || data.alert_ip || data.ip
-      const deviceName = data.device_name || data.device || data.device_name
+      const sourceIp = payloadData.source_ip || data.source_ip || payloadData.alert_ip || data.alert_ip || payloadData.ip || data.ip
+      const deviceName = payloadData.device_name || data.device_name || payloadData.device || data.device
       const toastText = `${message}${sourceIp ? ` (${sourceIp})` : ''}${deviceName ? ` - ${deviceName}` : ''}`
       const now = Date.now()
       const key = `${message}-${sourceIp ?? ''}-${deviceName ?? ''}`
