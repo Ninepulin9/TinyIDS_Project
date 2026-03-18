@@ -98,7 +98,8 @@ const Layout = ({ onLogout, user }) => {
       const payloadData = data.payload && typeof data.payload === 'object' ? data.payload : data
       const topic = String(data._mqtt_topic ?? payloadData._mqtt_topic ?? '').toLowerCase()
       const typeLabel = String(payloadData.type ?? data.type ?? '').toLowerCase()
-      if (topic !== 'esp/alert' && !typeLabel.includes('alert')) return
+      if (topic === 'esp/setting/now' || typeLabel === 'esp settings') return
+      if (!typeLabel && !payloadData.alert_msg && !payloadData.message && topic === '') return
       const message =
         payloadData.alert_msg ||
         data.alert_msg ||
