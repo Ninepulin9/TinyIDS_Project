@@ -52,6 +52,60 @@ const Layout = ({ onLogout, user }) => {
   const [showConfirm, setShowConfirm] = useState(false)
   const [attackNotifyEnabled, setAttackNotifyEnabled] = useState(true)
   const lastToastRef = useRef({ key: '', at: 0 })
+  const lastAlertIdRef = useRef(null)
+
+  const emitAlertToast = (incoming) => {
+    if (!attackNotifyEnabled) return
+    if (!incoming || typeof incoming !== 'object') return
+
+    const payload =
+      incoming?.payload && typeof incoming.payload === 'object'
+        ? incoming.payload
+        : incoming
+
+    const topic = String(
+      payload?._mqtt_topic ??
+        incoming?.payload?._mqtt_topic ??
+        incoming?._mqtt_topic ??
+        payload?.topic ??
+        incoming?.topic ??
+        '',
+    ).toLowerCase()
+
+    if (topic && !topic.includes('esp/alert')) return
+    const typeLabel = String(payload.type ?? incoming?.type ?? '').toLowerCase()
+    if (typeLabel === 'esp settings') return
+    if (!typeLabel && !payload.alert_msg && !payload.message && !incoming?.alert_msg) return
+
+    const message =
+      payload.alert_msg ||
+      incoming?.alert_msg ||
+      payload.message ||
+      incoming?.message ||
+      payload.type ||
+      incoming?.type ||
+      'Intrusion detected'
+    const sourceIp =
+      payload.source_ip ||
+      incoming?.source_ip ||
+      payload.alert_ip ||
+      incoming?.alert_ip ||
+      payload.ip ||
+      incoming?.ip
+    const deviceName =
+      payload.device_name ||
+      incoming?.device_name ||
+      payload.device ||
+      incoming?.device
+    const toastText = `${message}${sourceIp ? ` (${sourceIp})` : ''}${deviceName ? ` - ${deviceName}` : ''}`
+    const now = Date.now()
+    const key = `${message}-${sourceIp ?? ''}-${deviceName ?? ''}`
+    if (lastToastRef.current.key === key && now - lastToastRef.current.at < 3000) {
+      return
+    }
+    lastToastRef.current = { key, at: now }
+    toast.error(toastText)
+  }
 
   useEffect(() => {
     try {
@@ -92,36 +146,36 @@ const Layout = ({ onLogout, user }) => {
   useEffect(() => {
     const socket = getSocket()
     const handleLogNew = (payload) => {
-      if (!attackNotifyEnabled) return
-      const data = payload?.payload ?? payload
-      if (!data || typeof data !== 'object') return
-      const payloadData = data.payload && typeof data.payload === 'object' ? data.payload : data
-      const topic = String(data._mqtt_topic ?? payloadData._mqtt_topic ?? '').toLowerCase()
-      const typeLabel = String(payloadData.type ?? data.type ?? '').toLowerCase()
-      if (topic === 'esp/setting/now' || typeLabel === 'esp settings') return
-      if (!typeLabel && !payloadData.alert_msg && !payloadData.message && topic === '') return
-      const message =
-        payloadData.alert_msg ||
-        data.alert_msg ||
-        payloadData.message ||
-        data.message ||
-        payloadData.type ||
-        data.type ||
-        'Intrusion detected'
-      const sourceIp = payloadData.source_ip || data.source_ip || payloadData.alert_ip || data.alert_ip || payloadData.ip || data.ip
-      const deviceName = payloadData.device_name || data.device_name || payloadData.device || data.device
-      const toastText = `${message}${sourceIp ? ` (${sourceIp})` : ''}${deviceName ? ` - ${deviceName}` : ''}`
-      const now = Date.now()
-      const key = `${message}-${sourceIp ?? ''}-${deviceName ?? ''}`
-      if (lastToastRef.current.key === key && now - lastToastRef.current.at < 3000) {
-        return
-      }
-      lastToastRef.current = { key, at: now }
-      toast.error(toastText)
+      const id = payload?.id ?? payload?.payload?.id
+      if (id != null && lastAlertIdRef.current === id) return
+      if (id != null) lastAlertIdRef.current = id
+      emitAlertToast(payload)
     }
     socket.on('log:new', handleLogNew)
     return () => {
       socket.off('log:new', handleLogNew)
+    }
+  }, [attackNotifyEnabled])
+
+  useEffect(() => {
+    let timer = null
+    const pollLatest = async () => {
+      if (!attackNotifyEnabled) return
+      try {
+        const { data } = await api.get('/api/logs', { params: { limit: 1 } })
+        const latest = Array.isArray(data) ? data[0] : null
+        if (!latest) return
+        if (lastAlertIdRef.current === latest.id) return
+        lastAlertIdRef.current = latest.id
+        emitAlertToast(latest)
+      } catch {
+        // ignore polling errors
+      }
+    }
+    pollLatest()
+    timer = setInterval(pollLatest, 5000)
+    return () => {
+      if (timer) clearInterval(timer)
     }
   }, [attackNotifyEnabled])
 

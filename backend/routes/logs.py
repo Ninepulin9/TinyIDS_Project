@@ -87,13 +87,19 @@ def _serialize_log(log: Log) -> dict:
 def list_logs():
     user_id = _resolve_user_id()
     severity = request.args.get("severity")
+    limit_value = request.args.get("limit")
+    try:
+        limit = int(limit_value) if limit_value is not None else 200
+    except (TypeError, ValueError):
+        limit = 200
+    limit = max(1, min(limit, 500))
 
     query = Log.query.filter(Log.user_id == user_id).order_by(Log.created_at.desc())
     if severity:
         normalized = _normalize_severity(severity)
         query = query.filter(func.lower(Log.severity) == normalized.lower())
 
-    logs = [_serialize_log(log) for log in query.limit(200)]
+    logs = [_serialize_log(log) for log in query.limit(limit)]
     return jsonify(logs)
 
 
