@@ -52,11 +52,13 @@ def _is_valid_ip(value: str) -> bool:
     return bool(re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", value))
 
 
-def _raw_blacklist_rows():
+def _raw_blacklist_rows(user_id: int):
     rows = db.session.execute(
         text(
-            "SELECT id, device_id, ip_address, reason, created_at FROM blacklist ORDER BY created_at DESC"
-        )
+            "SELECT id, device_id, ip_address, reason, created_at "
+            "FROM blacklist WHERE user_id = :user_id ORDER BY created_at DESC"
+        ),
+        {"user_id": user_id},
     )
     for row in rows:
         yield row
@@ -74,7 +76,7 @@ def list_blacklist():
             .all()
         )
     except (OperationalError, ProgrammingError):
-        entries = list(_raw_blacklist_rows())
+        entries = list(_raw_blacklist_rows(user_id))
     return jsonify([_serialize_entry(entry) for entry in entries])
 
 
@@ -157,6 +159,9 @@ def delete_blacklist_entry(entry_id: int):
         db.session.commit()
         return "", HTTPStatus.NO_CONTENT
     except (OperationalError, ProgrammingError):
-        db.session.execute(text("DELETE FROM blacklist WHERE id = :entry_id"), {"entry_id": entry_id})
+        db.session.execute(
+            text("DELETE FROM blacklist WHERE id = :entry_id AND user_id = :user_id"),
+            {"entry_id": entry_id, "user_id": user_id},
+        )
         db.session.commit()
         return "", HTTPStatus.NO_CONTENT

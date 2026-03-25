@@ -298,11 +298,16 @@ class MQTTService:
         key = mac_value.lower()
         with self.registration_lock:
             entry = self.pending_registrations.get(key)
-            if not entry:
+            allow_reregister = key in self.reregister_once
+            if not entry and not allow_reregister:
                 return False
-            if entry.get("token") != token_value.lower():
+            if entry and entry.get("token") != token_value.lower():
                 return False
-            self.pending_registrations.pop(key, None)
+            if entry:
+                self.pending_registrations.pop(key, None)
+            if allow_reregister:
+                # clear marker so we don't accept duplicate stray messages
+                self.reregister_once.discard(key)
 
         device = self._register_device_from_registration(mac_value, token_value)
         if device and self.client:
@@ -376,8 +381,26 @@ class MQTTService:
         db.session.commit()
         return device
 
-    def request_reregister(self, device_id: str) -> None:
-        self.reregister_once.add(device_id)
+    def request_reregister(self, device_id: str) -> bool:
+        """Trigger a re-registration request for a specific device/mac."""
+        if not device_id:
+            return False
+        key = str(device_id).lower()
+        self.reregister_once.add(key)
+
+        if not self.client:
+            return False
+
+        payload = {"cmd": "REREGISTER", "device": device_id}
+        try:
+            self.client.publish(self.discovery_topic, json.dumps(payload), qos=0, retain=False)
+            if self.app:
+                self.app.logger.info("Requested re-register for %s", device_id)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            if self.app:
+                self.app.logger.warning("Failed to publish re-register for %s: %s", device_id, exc)
+            return False
 
     def _generate_session_code(self) -> str:
         return f"{secrets.randbelow(9000) + 1000:04d}"
@@ -507,7 +530,7 @@ class MQTTService:
             if not value:
                 continue
             # Keep only IPv4-like strings to avoid junk entries.
-            if not re.match(r"^(?:\\d{1,3}\\.){3}\\d{1,3}$", value):
+            if not re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", value):
                 continue
             ips.append(value)
         return ips
