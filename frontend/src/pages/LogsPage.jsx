@@ -744,7 +744,7 @@ const LogsPage = () => {
           </div>
           <div className="mt-6 space-y-5 text-sm text-slate-200">
             <div className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3">
-              <span>High Severity Events</span>
+              <span>Severity Events</span>
               <span className="text-base font-semibold text-rose-300">
                 {timeFilteredLogs.filter((log) => log.severity === 'High').length}
               </span>

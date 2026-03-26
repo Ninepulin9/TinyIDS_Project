@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
@@ -38,6 +38,8 @@ const Settings = () => {
   })
   const [systemSaving, setSystemSaving] = useState(false)
   const [dashboardSaving, setDashboardSaving] = useState(false)
+  const [systemLoaded, setSystemLoaded] = useState(false)
+  const systemDirtyRef = useRef(false)
   const attackNotificationsEnabled = Boolean(systemSettings.attack_notifications)
   const autoBlockEnabled = Boolean(systemSettings.auto_block_enabled)
 
@@ -49,10 +51,12 @@ const Settings = () => {
           api.get('/api/dashboard-settings/me'),
         ])
         const { cooldown_seconds: _cooldown, ...systemData } = system?.data ?? {}
-        setSystemSettings((prev) => ({
-          ...prev,
-          ...systemData,
-        }))
+        if (!systemDirtyRef.current) {
+          setSystemSettings((prev) => ({
+            ...prev,
+            ...systemData,
+          }))
+        }
         const dashboardData = dashboard?.data ?? {}
         const widgets = dashboardData.widgets ?? dashboardData.widgets_visible ?? {}
         const timeframe =
@@ -70,6 +74,8 @@ const Settings = () => {
       } catch (error) {
         console.error('Unable to load system settings', error)
         toast.error(getErrorMessage(error, 'Unable to load settings. Please try again.'))
+      } finally {
+        setSystemLoaded(true)
       }
     }
     fetchSettings()
@@ -82,6 +88,7 @@ const Settings = () => {
     try {
       await api.put('/api/settings/system', systemSettings)
       toast.success('System settings saved')
+      systemDirtyRef.current = false
       try {
         localStorage.setItem('tinyids_system_settings', JSON.stringify(systemSettings))
       } catch {
@@ -140,7 +147,10 @@ const Settings = () => {
               type="number"
               value={systemSettings.log_retention_days ?? 0}
               onChange={(event) =>
-                setSystemSettings((prev) => ({ ...prev, log_retention_days: Number(event.target.value) }))
+                setSystemSettings((prev) => {
+                  systemDirtyRef.current = true
+                  return { ...prev, log_retention_days: Number(event.target.value) }
+                })
               }
               className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100"
             />
@@ -161,9 +171,12 @@ const Settings = () => {
               <Switch
                 checked={attackNotificationsEnabled}
                 onChange={(nextValue) =>
-                  setSystemSettings((prev) => ({ ...prev, attack_notifications: nextValue }))
+                  setSystemSettings((prev) => {
+                    systemDirtyRef.current = true
+                    return { ...prev, attack_notifications: nextValue }
+                  })
                 }
-                disabled={systemSaving}
+                disabled={systemSaving || !systemLoaded}
                 label="Enable Attack Notifications"
               />
             </div>
@@ -182,9 +195,12 @@ const Settings = () => {
               <Switch
                 checked={autoBlockEnabled}
                 onChange={(nextValue) =>
-                  setSystemSettings((prev) => ({ ...prev, auto_block_enabled: nextValue }))
+                  setSystemSettings((prev) => {
+                    systemDirtyRef.current = true
+                    return { ...prev, auto_block_enabled: nextValue }
+                  })
                 }
-                disabled={systemSaving}
+                disabled={systemSaving || !systemLoaded}
                 label="Enable Auto Block IP"
               />
             </div>
