@@ -35,9 +35,12 @@ const BlacklistPage = () => {
   })
   const retryRef = useRef({ timer: null, attempts: 0 })
   const lastRequestRef = useRef({ time: 0 })
+  const pendingUnblockRef = useRef(new Map())
+  const [pendingUnblockTick, setPendingUnblockTick] = useState(0)
   const maxRetries = 5
   const retryDelayMs = 2000
   const requestThrottleMs = 5000
+  const pendingUnblockTtlMs = 60000
 
   const dedupeDevices = (list) => {
     const byKey = new Map()
@@ -399,10 +402,21 @@ const BlacklistPage = () => {
   }, [loadBlacklist])
 
   const filteredEntries = useMemo(() => {
+    const now = Date.now()
+    const pendingKeys = new Set()
+    pendingUnblockRef.current.forEach((timestamp, key) => {
+      if (now - timestamp > pendingUnblockTtlMs) {
+        pendingUnblockRef.current.delete(key)
+        return
+      }
+      pendingKeys.add(key)
+    })
     const connectedIds = new Set(devices.map((device) => String(device.id)))
     const connectedEntries = entries.filter((entry) => {
       const entryId = entry.device_id != null ? String(entry.device_id) : null
       if (!entryId) return false
+      const key = `${entryId}|${String(entry.ip_address ?? '').toLowerCase()}`
+      if (pendingKeys.has(key)) return false
       return connectedIds.has(entryId)
     })
     const filteredByDevice =
@@ -415,7 +429,7 @@ const BlacklistPage = () => {
       const haystack = `${entry.device_name ?? ''} ${entry.ip_address ?? ''}`.toLowerCase()
       return haystack.includes(needle)
     })
-  }, [devices, entries, query, selectedDeviceId])
+  }, [devices, entries, query, selectedDeviceId, pendingUnblockTick])
 
   useEffect(() => {
     setPage(1)
@@ -453,6 +467,9 @@ const BlacklistPage = () => {
       return
     }
     try {
+      const pendingKey = `${entry.device_id}|${String(entry.ip_address).trim().toLowerCase()}`
+      pendingUnblockRef.current.set(pendingKey, Date.now())
+      setPendingUnblockTick((tick) => tick + 1)
       const { data } = await api.get(`/api/devices/${entry.device_id}/settings/latest`)
       const payload = data && typeof data === 'object' ? { ...data } : {}
       const blocked = payload.blocked_ips ?? payload.BLOCKED_IPS ?? []
@@ -497,6 +514,9 @@ const BlacklistPage = () => {
       const message =
         err?.response?.data?.message ?? err?.message ?? 'Unable to update ESP settings'
       console.warn(message)
+      const pendingKey = `${entry.device_id}|${String(entry.ip_address).trim().toLowerCase()}`
+      pendingUnblockRef.current.delete(pendingKey)
+      setPendingUnblockTick((tick) => tick + 1)
       toast.error(`Unsuccessfully unblocked ${ipLabel}`)
     } finally {
       setUnblockTarget(null)
