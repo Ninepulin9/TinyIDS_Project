@@ -491,23 +491,23 @@ class MQTTService:
         def _loop():
             while True:
                 try:
-                      if self.client and self.client.is_connected():
-                          with self.app.app_context():
-                              self._prune_pending_confirmations()
-                              devices = (
-                                  Device.query.join(DeviceToken, DeviceToken.device_id == Device.id).all()
-                              )
+                    if self.client and self.client.is_connected():
+                        with self.app.app_context():
+                            self._prune_pending_confirmations()
+                            devices = (
+                                Device.query.join(DeviceToken, DeviceToken.device_id == Device.id).all()
+                            )
                             blocked_by_user = {}
                             for device in devices:
-                                  token_value = device.token.token if device.token else None
-                                  if not token_value:
-                                      continue
-                                  token_key = token_value.lower()
-                                  with self.pending_confirmation_lock:
-                                      if token_key in self.pending_confirmations:
-                                          continue
-                                  user_id = device.user_id
-                                  key = (user_id, device.id)
+                                token_value = device.token.token if device.token else None
+                                if not token_value:
+                                    continue
+                                token_key = token_value.lower()
+                                with self.pending_confirmation_lock:
+                                    if token_key in self.pending_confirmations:
+                                        continue
+                                user_id = device.user_id
+                                key = (user_id, device.id)
                                 if key not in blocked_by_user:
                                     blocked_by_user[key] = self._get_blacklist_ips(
                                         user_id, device.id
@@ -522,7 +522,9 @@ class MQTTService:
                                     retain=False,
                                 )
                                 if self.app:
-                                    self.app.logger.info("Settings poll: requested settings for %s", token_value)
+                                    self.app.logger.info(
+                                        "Settings poll: requested settings for %s", token_value
+                                    )
                                 # Merge DB blacklist into device settings if missing
                                 self._sync_blacklist_to_device(device, blocked_by_user[key])
                 except Exception as exc:  # noqa: BLE001
