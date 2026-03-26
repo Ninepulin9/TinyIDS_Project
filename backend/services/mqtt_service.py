@@ -41,6 +41,8 @@ class MQTTService:
         self.last_whitelist_sync: dict[int, float] = {}
         self.pending_settings_requests: dict[str, list[int]] = {}
         self.pending_settings_lock = threading.Lock()
+        self.pending_confirmations: dict[str, dict] = {}
+        self.pending_confirmation_lock = threading.Lock()
 
     def init_app(self, app) -> None:
         self.app = app
@@ -150,6 +152,8 @@ class MQTTService:
 
         with self.app.app_context():
             if topic_key in {"esp/entrance", "esp/esp/entrance"}:
+                if self._handle_registration_ack(payload, topic):
+                    return
                 if self._handle_registration_reply(payload, topic):
                     return
             if topic_key == "esp/alert":
@@ -200,6 +204,8 @@ class MQTTService:
         token_value = self._coerce_str(payload.get("token"))
         if token_value:
             self._clear_pending_settings_request(token_value, device.id)
+            with self.pending_confirmation_lock:
+                self.pending_confirmations.pop(token_value.lower(), None)
         self._touch_device(device, payload, mark_active=True)
         enriched = self._enrich_payload(payload, topic, default_type="ESP Settings")
         received_at = datetime.utcnow().isoformat() + "Z"
@@ -319,6 +325,8 @@ class MQTTService:
                 if entry.get("token") != token_value.lower():
                     return False
                 self.pending_registrations.pop(key, None)
+            elif not self.allow_reregister:
+                return False
 
         device = self._register_device_from_registration(mac_value, token_value)
         if device and self.client:
@@ -332,20 +340,66 @@ class MQTTService:
                 "device:registered",
                 {"device_id": device.id, "esp_id": device.esp_id},
             )
-            try:
-                control_topic = self._control_topic_for_device(device)
-                self._register_settings_request(device)
-                self.client.publish(
-                    control_topic,
-                    f"showsetting-{token_value}",
-                    qos=0,
-                    retain=False,
-                )
-                if self.app:
-                    self.app.logger.info("Requested settings after register for %s", mac_value)
-            except Exception as exc:  # noqa: BLE001
-                if self.app:
-                    self.app.logger.warning("Failed to request settings after register: %s", exc)
+            with self.pending_confirmation_lock:
+                self.pending_confirmations[token_value.lower()] = {
+                    "device_id": device.id,
+                    "session_code": session_code,
+                    "ts": time.time(),
+                }
+        return True
+
+    def _handle_registration_ack(self, payload: dict, topic: str) -> bool:
+        token_value = self._coerce_str(payload.get("token"))
+        status_value = self._coerce_str(payload.get("status") or payload.get("state"))
+        msg_value = self._coerce_str(payload.get("msg") or payload.get("message"))
+        ack_id = self._coerce_str(payload.get("id"))
+        if not token_value:
+            return False
+
+        normalized_status = (status_value or "").lower()
+        normalized_msg = (msg_value or "").lower()
+        if normalized_status not in {"success", "ok", "ready"} and "registered" not in normalized_msg:
+            return False
+
+        token_key = token_value.lower()
+        pending = None
+        with self.pending_confirmation_lock:
+            pending = self.pending_confirmations.get(token_key)
+
+        device = None
+        session_code = None
+        if pending:
+            session_code = pending.get("session_code")
+            device_id = pending.get("device_id")
+            if device_id:
+                device = Device.query.get(device_id)
+        if not device:
+            token_row = DeviceToken.query.filter_by(token=token_value).first()
+            if token_row:
+                device = Device.query.get(token_row.device_id)
+        if not device:
+            return False
+
+        if ack_id:
+            session_code = ack_id
+            self._store_session_code(device, ack_id)
+
+        try:
+            control_topic = self._control_topic_for_device(device)
+            self._register_settings_request(device)
+            self.client.publish(
+                control_topic,
+                f"showsetting-{token_value}",
+                qos=0,
+                retain=False,
+            )
+            if self.app:
+                self.app.logger.info("Requested settings after register ack for %s", token_value)
+        except Exception as exc:  # noqa: BLE001
+            if self.app:
+                self.app.logger.warning("Failed to request settings after register ack: %s", exc)
+        with self.pending_confirmation_lock:
+            self.pending_confirmations.pop(token_key, None)
         return True
 
     def _register_device_from_registration(self, mac_address: str, token: str) -> Device | None:
@@ -437,18 +491,23 @@ class MQTTService:
         def _loop():
             while True:
                 try:
-                    if self.client and self.client.is_connected():
-                        with self.app.app_context():
-                            devices = (
-                                Device.query.join(DeviceToken, DeviceToken.device_id == Device.id).all()
-                            )
+                      if self.client and self.client.is_connected():
+                          with self.app.app_context():
+                              self._prune_pending_confirmations()
+                              devices = (
+                                  Device.query.join(DeviceToken, DeviceToken.device_id == Device.id).all()
+                              )
                             blocked_by_user = {}
                             for device in devices:
-                                token_value = device.token.token if device.token else None
-                                if not token_value:
-                                    continue
-                                user_id = device.user_id
-                                key = (user_id, device.id)
+                                  token_value = device.token.token if device.token else None
+                                  if not token_value:
+                                      continue
+                                  token_key = token_value.lower()
+                                  with self.pending_confirmation_lock:
+                                      if token_key in self.pending_confirmations:
+                                          continue
+                                  user_id = device.user_id
+                                  key = (user_id, device.id)
                                 if key not in blocked_by_user:
                                     blocked_by_user[key] = self._get_blacklist_ips(
                                         user_id, device.id
@@ -887,6 +946,17 @@ class MQTTService:
             return None
         return Device.query.get(device_id)
 
+    def _prune_pending_confirmations(self, ttl_seconds: int = 120) -> None:
+        now = time.time()
+        with self.pending_confirmation_lock:
+            stale = [
+                token
+                for token, entry in self.pending_confirmations.items()
+                if now - float(entry.get("ts", 0)) > ttl_seconds
+            ]
+            for token in stale:
+                self.pending_confirmations.pop(token, None)
+
     def _clear_pending_settings_request(self, token_value: str, device_id: int) -> None:
         token_key = self._coerce_str(token_value)
         if not token_key:
@@ -973,9 +1043,21 @@ class MQTTService:
             raw = cached.get("g_mqtt_whitelist") or cached.get("G_MQTT_WHITELIST")
             topics = self._normalize_mqtt_whitelist(raw)
             for topic in topics:
-                if topic not in union_set:
-                    union_set.add(topic)
-                    union_topics.append(topic)
+                    if topic not in union_set:
+                        union_set.add(topic)
+                        union_topics.append(topic)
+
+        base_topics = [
+            "esp/alert",
+            "esp/setting/Now",
+            "esp/Alive",
+            "esp/Entrance",
+            "esp/esp/Entrance",
+        ]
+        for topic in base_topics:
+            if topic not in union_set:
+                union_set.add(topic)
+                union_topics.append(topic)
 
         # Ensure per-device session topics are shared across the fleet.
         for device in online_devices:
