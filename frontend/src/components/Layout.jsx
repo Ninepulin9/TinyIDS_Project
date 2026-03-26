@@ -113,10 +113,18 @@ const Layout = ({ onLogout, user }) => {
     toast.custom(
       (t) => (
         <div
-          className={`w-full max-w-sm rounded-xl bg-white px-4 py-3 text-slate-900 shadow-xl ring-1 ring-slate-200 ${
+          className={`relative w-full max-w-sm rounded-xl bg-white px-4 py-3 text-slate-900 shadow-xl ring-1 ring-slate-200 ${
             t.visible ? 'animate-enter' : 'animate-leave'
           }`}
         >
+          <button
+            type="button"
+            onClick={() => toast.dismiss(t.id)}
+            className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Dismiss alert"
+          >
+            ×
+          </button>
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             <span className="inline-flex h-5 w-5 items-center justify-center">
               <svg

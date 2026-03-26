@@ -615,6 +615,17 @@ const RuleManagementPage = () => {
         message: `showsetting-default-${deviceToken}`,
         append_token: false,
       })
+      const macValue = selectedDevice?.mac_address || selectedDevice?.esp_id
+      if (macValue) {
+        try {
+          await api.post('/api/devices/discover', {
+            mac_address: macValue,
+            token: deviceToken,
+          })
+        } catch {
+          // ignore re-register errors; settings poll will still run
+        }
+      }
       // Ask for the full settings payload after default reset (delayed)
       setAwaitingToken(deviceToken)
       stopPolling()
