@@ -293,16 +293,32 @@ class MQTTService:
             or payload.get("macAddress")
         )
         token_value = self._coerce_str(payload.get("token"))
-        if not mac_value or not token_value:
+        if not mac_value:
             return False
+
         key = mac_value.lower()
+        pending_token = None
         with self.registration_lock:
             entry = self.pending_registrations.get(key)
-            if not entry:
-                return False
-            if entry.get("token") != token_value.lower():
-                return False
-            self.pending_registrations.pop(key, None)
+            if entry:
+                pending_token = self._coerce_str(entry.get("token"))
+
+        if not token_value and pending_token:
+            token_value = pending_token
+        if not token_value and self.allow_reregister:
+            device = (
+                Device.query.filter(func.lower(Device.mac_address) == mac_value.lower()).first()
+            )
+            if device and device.token and device.token.token:
+                token_value = self._coerce_str(device.token.token)
+        if not token_value:
+            return False
+        with self.registration_lock:
+            entry = self.pending_registrations.get(key)
+            if entry:
+                if entry.get("token") != token_value.lower():
+                    return False
+                self.pending_registrations.pop(key, None)
 
         device = self._register_device_from_registration(mac_value, token_value)
         if device and self.client:
