@@ -299,8 +299,41 @@ class MQTTService:
             or payload.get("macAddress")
         )
         token_value = self._coerce_str(payload.get("token"))
+        message_value = self._coerce_str(payload.get("message") or payload.get("msg"))
         if not mac_value:
             return False
+
+        if message_value:
+            normalized_message = message_value.lower()
+            if "already" in normalized_message and "register" in normalized_message:
+                device = (
+                    Device.query.filter(func.lower(Device.mac_address) == mac_value.lower()).first()
+                )
+                if not device:
+                    return False
+                self._clear_session_code(device)
+                if device.token and device.token.token and self.client:
+                    try:
+                        token_value = self._coerce_str(device.token.token)
+                        control_topic = self._control_topic_for_device(device)
+                        self._register_settings_request(device)
+                        self.client.publish(
+                            control_topic,
+                            f"showsetting-{token_value}",
+                            qos=0,
+                            retain=False,
+                        )
+                        if self.app:
+                            self.app.logger.info(
+                                "Device already registered; requested settings for %s", mac_value
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        if self.app:
+                            self.app.logger.warning(
+                                "Failed to request settings for already-registered device: %s",
+                                exc,
+                            )
+                return True
 
         key = mac_value.lower()
         pending_token = None
@@ -906,6 +939,12 @@ class MQTTService:
             if not key:
                 continue
             self.session_codes[str(key).lower()] = code
+
+    def _clear_session_code(self, device: Device) -> None:
+        for key in (device.mac_address, device.esp_id):
+            if not key:
+                continue
+            self.session_codes.pop(str(key).lower(), None)
 
     def _session_code_for_device(self, device: Device) -> str | None:
         for key in (device.mac_address, device.esp_id):

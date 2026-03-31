@@ -107,6 +107,7 @@ const ruleSections = [
     title: 'MQTT Whitelist & Blocked IPs',
     subtitle: 'g_mqtt_whitelist / blocked_ips',
     description: 'Topics allowed to publish/subscribe and IPs blocked by IDS.',
+    gridCols: 'sm:grid-cols-2 lg:grid-cols-2',
     fields: [
       {
         key: 'g_mqtt_whitelist',
@@ -725,6 +726,7 @@ const RuleManagementPage = () => {
           .map((item) => item.trim())
           .filter(Boolean)
       : []
+    const showListPreview = field.key === 'g_mqtt_whitelist' || field.key === 'blocked_ips'
     const inputClassName =
       'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
       const spanClass = field.fullWidth ? 'sm:col-span-2 lg:col-span-3' : ''
@@ -781,13 +783,37 @@ const RuleManagementPage = () => {
             </button>
           </div>
         ) : isListField ? (
-          <textarea
-            rows={field.key === 'xss_patterns' ? 3 : 2}
-            value={ruleValues[field.key]}
-            onChange={(e) => handleChange(field.key, e.target.value)}
-            className={`${inputClassName} resize-y`}
-            placeholder={field.placeholder}
-          />
+          <div className="space-y-2">
+            {showListPreview && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
+                  <span>{field.key === 'g_mqtt_whitelist' ? 'Topics' : 'IPs'} ({listItems.length})</span>
+                  <span>Enter / comma / newline to add</span>
+                </div>
+                {listItems.length ? (
+                  <div className="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1">
+                    {listItems.map((item) => (
+                      <span
+                        key={`${field.key}-${item}`}
+                        className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm"
+                      >
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400">No entries yet.</p>
+                )}
+              </div>
+            )}
+            <textarea
+              rows={field.key === 'xss_patterns' ? 3 : showListPreview ? 4 : 2}
+              value={ruleValues[field.key]}
+              onChange={(e) => handleChange(field.key, e.target.value)}
+              className={`${inputClassName} resize-y font-mono`}
+              placeholder={field.placeholder}
+            />
+          </div>
         ) : (
           <input
             type={inputType}
@@ -969,7 +995,7 @@ const RuleManagementPage = () => {
                         </div>
                         {expanded[section.id] && (
                           <div className="border-t border-slate-200 bg-white px-4 py-4">
-                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <div className={`grid gap-4 sm:grid-cols-2 ${section.gridCols ?? 'lg:grid-cols-3'}`}>
                               {section.fields.map((field) => renderField(field))}
                             </div>
                           </div>
