@@ -999,6 +999,18 @@ class MQTTService:
                     union_set.add(topic)
                     union_topics.append(topic)
 
+        # Always include baseline control/alive topics so reset-to-default payloads don't wipe access.
+        for device in online_devices:
+            baseline_topics = [
+                self._control_topic_for_device(device),
+                self._alive_topic_for_device(device),
+                self._alive_setting_topic_for_device(device),
+            ]
+            for topic in baseline_topics:
+                if topic and topic not in union_set:
+                    union_set.add(topic)
+                    union_topics.append(topic)
+
         if not union_topics:
             return
 
