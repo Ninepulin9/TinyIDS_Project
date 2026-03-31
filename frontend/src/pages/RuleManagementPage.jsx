@@ -807,7 +807,7 @@ const RuleManagementPage = () => {
               <span className="text-[11px] text-slate-400">Enter / comma / newline to add</span>
             </div>
 
-            <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/60 p-2">
+            <div className="min-h-48 max-h-96 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/60 p-3">
               {listItems.length === 0 ? (
                 <div className="flex h-16 items-center justify-center text-xs text-slate-400">
                   No entries yet
@@ -834,7 +834,7 @@ const RuleManagementPage = () => {
               )}
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <input
                 type="text"
                 value={listDrafts[field.key] ?? ''}
@@ -847,7 +847,7 @@ const RuleManagementPage = () => {
                     handleListAdd(field.key, e.currentTarget.value)
                   }
                 }}
-                className={`${inputClassName} sm:flex-1`}
+                className={`${inputClassName} sm:flex-1 sm:min-w-[360px] lg:min-w-[500px]`}
                 placeholder={
                   isWhitelistField
                     ? 'esp/setting/Control, esp/Alive/Check'
@@ -1010,7 +1010,7 @@ const RuleManagementPage = () => {
       {drawerOpen && (
         <div className="fixed inset-0 z-40 flex">
           <div className="hidden flex-1 bg-slate-900/40 backdrop-blur-sm sm:block" onClick={closeDrawer} />
-          <div className="flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl">
+          <div className="flex h-full w-full max-w-3xl lg:max-w-4xl flex-col bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-400">Settings Editor</p>
