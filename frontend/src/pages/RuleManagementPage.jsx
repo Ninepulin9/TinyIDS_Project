@@ -791,23 +791,21 @@ const RuleManagementPage = () => {
                   <span>Enter / comma / newline to add</span>
                 </div>
                 {listItems.length ? (
-                  <div className="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1">
+                  <ul className="max-h-40 space-y-1 overflow-y-auto pr-1 text-xs font-mono text-slate-700">
                     {listItems.map((item) => (
-                      <span
-                        key={`${field.key}-${item}`}
-                        className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm"
-                      >
-                        {item}
-                      </span>
+                      <li key={`${field.key}-${item}`} className="flex items-start gap-2">
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-400" />
+                        <span className="break-all">{item}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 ) : (
                   <p className="text-xs text-slate-400">No entries yet.</p>
                 )}
               </div>
             )}
             <textarea
-              rows={field.key === 'xss_patterns' ? 3 : showListPreview ? 4 : 2}
+              rows={field.key === 'xss_patterns' ? 3 : showListPreview ? 6 : 2}
               value={ruleValues[field.key]}
               onChange={(e) => handleChange(field.key, e.target.value)}
               className={`${inputClassName} resize-y font-mono`}
