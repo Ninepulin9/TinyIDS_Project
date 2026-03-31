@@ -161,6 +161,10 @@ const RuleManagementPage = () => {
   const [saving, setSaving] = useState(false)
   const [loadingRules, setLoadingRules] = useState(false)
   const [awaitingToken, setAwaitingToken] = useState('')
+  const [listDrafts, setListDrafts] = useState({
+    g_mqtt_whitelist: '',
+    blocked_ips: '',
+  })
   const [aliveCheckAt, setAliveCheckAt] = useState(null)
   const [uiNow, setUiNow] = useState(Date.now())
   const pollRef = useRef({ timer: null, attempts: 0 })
@@ -300,6 +304,32 @@ const RuleManagementPage = () => {
   const handleChange = (field, value) => {
     setRuleValues((prev) => ({ ...prev, [field]: value }))
     setRuleErrors((prev) => ({ ...prev, [field]: undefined }))
+  }
+
+  const parseListInput = (text) =>
+    String(text ?? '')
+      .split(/[,\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+  const updateListField = (field, values) => {
+    const unique = Array.from(new Set(values))
+    setRuleValues((prev) => ({ ...prev, [field]: unique.join(', ') }))
+    setRuleErrors((prev) => ({ ...prev, [field]: undefined }))
+  }
+
+  const handleListAdd = (field, rawValue) => {
+    const incoming = parseListInput(rawValue ?? listDrafts[field] ?? '')
+    if (!incoming.length) return
+    const current = parseListInput(ruleValues[field])
+    updateListField(field, [...current, ...incoming])
+    setListDrafts((prev) => ({ ...prev, [field]: '' }))
+  }
+
+  const handleListRemove = (field, index) => {
+    const current = parseListInput(ruleValues[field])
+    current.splice(index, 1)
+    updateListField(field, current)
   }
 
   const updateIpMacPair = (index, key, value) => {
@@ -708,11 +738,10 @@ const RuleManagementPage = () => {
       'xss_patterns',
     ])
     const isListField = listFieldKeys.has(field.key)
+    const isWhitelistField = field.key === 'g_mqtt_whitelist'
+    const isBlockedIpField = field.key === 'blocked_ips'
     const listItems = isListField
-      ? String(ruleValues[field.key] ?? '')
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean)
+      ? parseListInput(ruleValues[field.key])
       : []
     const inputClassName =
       'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100'
@@ -768,6 +797,83 @@ const RuleManagementPage = () => {
             >
               Add IP/MAC Pair
             </button>
+          </div>
+        ) : isWhitelistField || isBlockedIpField ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3">
+              {listItems.length === 0 && (
+                <span className="text-xs text-slate-400">No entries yet</span>
+              )}
+              {listItems.map((item, idx) => (
+                <span
+                  key={`${field.key}-chip-${idx}-${item}`}
+                  className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
+                >
+                  <span className="font-mono text-[11px]">{item}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleListRemove(field.key, idx)}
+                    className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-600 transition hover:bg-slate-300"
+                    aria-label="Remove"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={listDrafts[field.key] ?? ''}
+                onChange={(e) =>
+                  setListDrafts((prev) => ({ ...prev, [field.key]: e.target.value }))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleListAdd(field.key, e.currentTarget.value)
+                  }
+                }}
+                className={inputClassName}
+                placeholder={
+                  isWhitelistField
+                    ? 'esp/setting/Control, esp/Alive/Check'
+                    : '192.168.1.10, 192.168.1.11'
+                }
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleListAdd(field.key)}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Add
+                </button>
+                {isWhitelistField && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleListAdd(field.key, 'esp/setting/Control, esp/Alive/Check, esp/alive/setting')
+                    }
+                    className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+                  >
+                    Add control/alive defaults
+                  </button>
+                )}
+                {isBlockedIpField && (
+                  <button
+                    type="button"
+                    onClick={() => handleListAdd(field.key, '192.168.1.10')}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    Quick add sample
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 sm:ml-2 sm:self-center">
+                Enter to add, comma or newline will split automatically.
+              </p>
+            </div>
           </div>
         ) : isListField ? (
           <textarea
