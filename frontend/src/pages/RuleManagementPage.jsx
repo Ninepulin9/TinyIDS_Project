@@ -799,44 +799,42 @@ const RuleManagementPage = () => {
             </button>
           </div>
         ) : isWhitelistField || isBlockedIpField ? (
-          <div className="space-y-3 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-baseline gap-2">
-                <span className="text-xs uppercase tracking-wide text-slate-500">List</span>
-                <span className="rounded-full bg-slate-900/5 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                  {listItems.length} items
-                </span>
-              </div>
-              <span className="text-[11px] text-slate-500">
-                Enter, comma, or newline to split automatically
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-wide text-slate-500">
+                {isWhitelistField ? 'Topics' : 'IPs'} ({listItems.length})
               </span>
+              <span className="text-[11px] text-slate-400">Enter / comma / newline to add</span>
             </div>
 
-            <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-              {listItems.length === 0 && (
-                <div className="col-span-2 flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white/60 px-3 py-4 text-xs text-slate-400">
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50/60 p-2">
+              {listItems.length === 0 ? (
+                <div className="flex h-16 items-center justify-center text-xs text-slate-400">
                   No entries yet
                 </div>
-              )}
-              {listItems.map((item, idx) => (
-                <div
-                  key={`${field.key}-chip-${idx}-${item}`}
-                  className="group inline-flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs shadow-sm"
-                >
-                  <span className="font-mono text-[12px] text-slate-800 truncate">{item}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleListRemove(field.key, idx)}
-                    className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 transition hover:bg-rose-100 hover:text-rose-600"
-                    aria-label="Remove"
-                  >
-                    ×
-                  </button>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {listItems.map((item, idx) => (
+                    <span
+                      key={`${field.key}-chip-${idx}-${item}`}
+                      className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm"
+                    >
+                      <span className="font-mono text-[11px]">{item}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleListRemove(field.key, idx)}
+                        className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 transition hover:bg-rose-100 hover:text-rose-600"
+                        aria-label="Remove"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
 
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input
                 type="text"
                 value={listDrafts[field.key] ?? ''}
@@ -849,7 +847,7 @@ const RuleManagementPage = () => {
                     handleListAdd(field.key, e.currentTarget.value)
                   }
                 }}
-                className={`${inputClassName} lg:w-2/3`}
+                className={`${inputClassName} sm:flex-1`}
                 placeholder={
                   isWhitelistField
                     ? 'esp/setting/Control, esp/Alive/Check'
@@ -872,7 +870,7 @@ const RuleManagementPage = () => {
                     }
                     className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100"
                   >
-                    Add control/alive defaults
+                    Add defaults
                   </button>
                 )}
                 {isBlockedIpField && (
@@ -881,7 +879,7 @@ const RuleManagementPage = () => {
                     onClick={() => handleListAdd(field.key, '192.168.1.10')}
                     className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
                   >
-                    Quick add sample
+                    Quick sample
                   </button>
                 )}
               </div>
