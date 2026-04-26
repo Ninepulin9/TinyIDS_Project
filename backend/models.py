@@ -141,6 +141,7 @@ class DeviceToken(db.Model, TimestampMixin):
     id = db.Column(db.Integer, primary_key=True)
     device_id = db.Column(db.Integer, db.ForeignKey("devices.id"), unique=True, nullable=False)
     token = db.Column(db.String(255), nullable=False)
+    session_code = db.Column(db.String(32))
 
 
 DEFAULT_DASHBOARD_WIDGETS = {

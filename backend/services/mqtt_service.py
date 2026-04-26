@@ -935,18 +935,57 @@ class MQTTService:
                 self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
 
     def _store_session_code(self, device: Device, code: str) -> None:
+        normalized = self._coerce_str(code)
+        if not normalized:
+            return
         for key in (device.mac_address, device.esp_id):
             if not key:
                 continue
-            self.session_codes[str(key).lower()] = code
+            self.session_codes[str(key).lower()] = normalized
+        token_row = device.token
+        if token_row and token_row.session_code != normalized:
+            token_row.session_code = normalized
+            try:
+                db.session.add(token_row)
+                db.session.commit()
+            except Exception as exc:  # noqa: BLE001
+                db.session.rollback()
+                if self.app:
+                    self.app.logger.warning(
+                        "Failed to persist session code for device %s: %s",
+                        device.id,
+                        exc,
+                    )
 
     def _clear_session_code(self, device: Device) -> None:
         for key in (device.mac_address, device.esp_id):
             if not key:
                 continue
             self.session_codes.pop(str(key).lower(), None)
+        token_row = device.token
+        if token_row and token_row.session_code:
+            token_row.session_code = None
+            try:
+                db.session.add(token_row)
+                db.session.commit()
+            except Exception as exc:  # noqa: BLE001
+                db.session.rollback()
+                if self.app:
+                    self.app.logger.warning(
+                        "Failed to clear session code for device %s: %s",
+                        device.id,
+                        exc,
+                    )
 
     def _session_code_for_device(self, device: Device) -> str | None:
+        token_row = device.token
+        persisted_code = self._coerce_str(getattr(token_row, "session_code", None))
+        if persisted_code:
+            for key in (device.mac_address, device.esp_id):
+                if not key:
+                    continue
+                self.session_codes[str(key).lower()] = persisted_code
+            return persisted_code
         for key in (device.mac_address, device.esp_id):
             if not key:
                 continue
@@ -1091,9 +1130,13 @@ class MQTTService:
         base_topics = [
             "esp/alert",
             "esp/setting/Now",
+            "esp/setting/Control",
             "esp/Alive",
+            "esp/Alive/Check",
+            "esp/alive/setting",
             "esp/Entrance",
             "esp/esp/Entrance",
+            "test/data",
         ]
         for topic in base_topics:
             if topic not in union_set:
@@ -1102,15 +1145,15 @@ class MQTTService:
 
         # Ensure per-device session topics are shared across the fleet.
         for device in online_devices:
-            code = self._session_code_for_device(device)
-            if not code:
-                continue
             derived_topics = [
-                f"esp/setting/Control-{code}",
-                f"esp/Alive/Check-{code}",
-                f"esp/alive/setting-{code}",
+                self._control_topic_for_device(device),
+                self._alive_topic_for_device(device),
+                self._alive_setting_topic_for_device(device),
+                self._data_topic_for_device(device),
             ]
             for topic in derived_topics:
+                if not topic:
+                    continue
                 if topic not in union_set:
                     union_set.add(topic)
                     union_topics.append(topic)

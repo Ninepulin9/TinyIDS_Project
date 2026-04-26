@@ -21,7 +21,7 @@ const sections = [
   {
     title: 'System Config',
     items: [
-      { to: '/devices', label: 'ESP Config', icon: wifiIcon },
+      { to: '/devices', label: 'Device Register/Setting', icon: wifiIcon },
       { to: '/rules', label: 'Rule Management', icon: rule },
     ],
   },
@@ -38,7 +38,7 @@ const sections = [
 const routeSubtitles = {
   '/dashboard': 'Main Dashboard',
   '/logs': 'Threat Monitoring',
-  '/devices': 'Device Operations',
+  '/devices': 'Device Register/Setting',
   '/blacklist': 'Network Blacklist',
   '/dashboard-settings': 'Preferences',
   '/settings': 'System Administration',

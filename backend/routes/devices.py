@@ -278,6 +278,7 @@ def publish_to_device(device_id: int):
     message = payload.get("message")
     json_payload = payload.get("payload")
     append_token = payload.get("append_token", True)
+    fallback_to_base = bool(payload.get("fallback_to_base", False))
     token_value = device.token.token if device.token else None
 
     if append_token:
@@ -311,9 +312,24 @@ def publish_to_device(device_id: int):
         payload_text = str(message)
         if "showsetting" in payload_text.lower():
             mqtt_service._register_settings_request(device)
+            fallback_to_base = True
 
-    mqtt_service.client.publish(topic, payload_text, qos=0, retain=False)
-    return jsonify({"status": "sent", "topic": topic, "payload": payload_text})
+    publish_topics = [topic]
+    if fallback_to_base and not append_token and topic_base and topic_base != topic:
+        publish_topics.append(topic_base)
+    publish_topics = list(dict.fromkeys(publish_topics))
+
+    for publish_topic in publish_topics:
+        mqtt_service.client.publish(publish_topic, payload_text, qos=0, retain=False)
+
+    return jsonify(
+        {
+            "status": "sent",
+            "topic": topic,
+            "topics": publish_topics,
+            "payload": payload_text,
+        }
+    )
 
 
 @devices_bp.route("/<int:device_id>/mqtt/test", methods=["POST"])

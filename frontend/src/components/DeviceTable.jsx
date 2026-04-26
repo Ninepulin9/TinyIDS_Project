@@ -31,8 +31,8 @@ const DeviceTable = ({
   const headerContent = showHeader ? (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Registered ESP32 Devices</h2>
-        <p className="text-sm text-slate-500">Manage Wi-Fi, MQTT, and activation status across your TinyIDS fleet.</p>
+        <h2 className="text-lg font-semibold text-slate-900">Registered Devices</h2>
+        <p className="text-sm text-slate-500">Manage registration, Wi-Fi, MQTT, and activation status across your TinyIDS fleet.</p>
       </div>
       <div className="relative w-full sm:w-64">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

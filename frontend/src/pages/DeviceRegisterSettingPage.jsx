@@ -8,7 +8,7 @@ import DeviceTable from '../components/DeviceTable.jsx'
 import WifiModal from '../components/WifiModal.jsx'
 import MqttModal from '../components/MqttModal.jsx'
 
-const ESPConfigPage = () => {
+const DeviceRegisterSettingPage = () => {
   const [devices, setDevices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -569,7 +569,7 @@ const ESPConfigPage = () => {
     <div className="space-y-6 text-slate-900" style={{ colorScheme: 'light' }}>
       <header className="flex flex-col gap-4 rounded-3xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-6 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold sm:text-4xl">ESP Configuration</h1>
+          <h1 className="text-3xl font-semibold sm:text-4xl">Device Register/Setting</h1>
           <p className="mt-2 text-sm text-white/80">
             Manage Wi-Fi and MQTT credentials for every TinyIDS ESP32 sensor.
           </p>
@@ -781,4 +781,4 @@ const ESPConfigPage = () => {
   )
 }
 
-export default ESPConfigPage
+export default DeviceRegisterSettingPage

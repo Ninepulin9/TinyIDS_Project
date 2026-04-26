@@ -8,7 +8,7 @@ import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
 import Settings from './pages/Settings.jsx'
 import LogsPage from './pages/LogsPage.jsx'
-import ESPConfigPage from './pages/ESPConfigPage.jsx'
+import DeviceRegisterSettingPage from './pages/DeviceRegisterSettingPage.jsx'
 import DashboardSettingsPage from './pages/DashboardSettingsPage.jsx'
 import UserSettingsPage from './pages/UserSettingsPage.jsx'
 import BlacklistPage from './pages/BlacklistPage.jsx'
@@ -32,7 +32,7 @@ const App = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/blacklist" element={<BlacklistPage />} />
-        <Route path="/devices" element={<ESPConfigPage />} />
+        <Route path="/devices" element={<DeviceRegisterSettingPage />} />
         <Route path="/rules" element={<RuleManagementPage />} />
         <Route path="/dashboard-settings" element={<DashboardSettingsPage />} />
         <Route path="/settings" element={<Settings />} />

@@ -4,6 +4,7 @@ from typing import Iterable, List
 
 from flask import Flask, jsonify
 from flask_cors import CORS
+from sqlalchemy import inspect, text
 from werkzeug.exceptions import HTTPException
 
 from config import settings
@@ -22,6 +23,18 @@ from routes.device_rules import device_rules_bp
 
 
 logging.basicConfig(level=logging.INFO)
+
+
+def ensure_runtime_schema(app: Flask) -> None:
+    # `create_all()` will not add new columns to an existing table, so patch legacy DBs here.
+    inspector = inspect(db.engine)
+    columns = {column["name"] for column in inspector.get_columns("device_tokens")}
+    if "session_code" in columns:
+        return
+
+    with db.engine.begin() as connection:
+        connection.execute(text("ALTER TABLE device_tokens ADD COLUMN session_code VARCHAR(32)"))
+    app.logger.info("Added device_tokens.session_code column")
 
 
 def create_app() -> Flask:
@@ -57,10 +70,11 @@ def create_app() -> Flask:
     register_blueprints(app)
     register_jwt_callbacks(app)
 
-    mqtt_service.init_app(app)
-
     with app.app_context():
         db.create_all()
+        ensure_runtime_schema(app)
+
+    mqtt_service.init_app(app)
 
     @app.route("/health")
     def health():
