@@ -605,60 +605,19 @@ const RuleManagementPage = () => {
       toast.error('No token found for this device.')
       return
     }
-    const now = Date.now()
-    lastSettingsRequestRef.current = { token: deviceToken, time: now }
-    requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
-    setLoadingRules(true)
-    setRuleValues({ ...defaultRuleState, token: deviceToken })
-    const macValue = selectedDevice?.mac_address || selectedDevice?.esp_id
-    const queueRediscovery = () => {
-      if (!macValue) return
-      ;[0, 2500, 5000].forEach((delayMs) => {
-        setTimeout(() => {
-          api.post('/api/devices/discover', {
-            mac_address: macValue,
-            token: deviceToken,
-          }).catch(() => {
-            // ignore retry errors; settings polling continues below
-          })
-        }, delayMs)
-      })
-    }
+    stopPolling()
+    setAwaitingToken('')
+    setLoadingRules(false)
     try {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
         message: `showsetting-default-${deviceToken}`,
         append_token: false,
       })
-      queueRediscovery()
-      // Ask for the full settings payload after default reset (delayed)
-      setAwaitingToken(deviceToken)
-      stopPolling()
-      setTimeout(() => {
-        api.post(`/api/devices/${selectedDevice.id}/publish`, {
-          topic_base: 'esp/setting/Control',
-          message: `showsetting-${deviceToken}`,
-          append_token: false,
-        })
-        pollRef.current.timer = setInterval(async () => {
-          pollRef.current.attempts += 1
-          if (pollRef.current.attempts >= maxPollAttempts) {
-            stopPolling()
-            setAwaitingToken('')
-            setLoadingRules(false)
-            toast.error('Device did not respond in time.')
-            return
-          }
-          const done = await pollSettingsOnce(deviceToken, selectedDevice.id)
-          if (done) {
-            stopPolling()
-          }
-        }, pollIntervalMs)
-      }, 5000)
+      toast.success('Reset command sent to device')
     } catch (err) {
-      const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request defaults'
+      const message = err?.response?.data?.message ?? err?.message ?? 'Unable to send reset command'
       toast.error(message)
-      setLoadingRules(false)
     }
   }
 
