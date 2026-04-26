@@ -270,8 +270,11 @@ def upsert_token(device_id: int):
 @jwt_required()
 def publish_to_device(device_id: int):
     device = _get_device_or_404(device_id)
-    if not mqtt_service.client:
-        return jsonify({"message": "MQTT client not connected"}), HTTPStatus.SERVICE_UNAVAILABLE
+    if not mqtt_service.is_connected():
+        message = "MQTT broker unavailable; backend is still reconnecting"
+        if mqtt_service.last_connection_error:
+            message = f"{message} ({mqtt_service.last_connection_error})"
+        return jsonify({"message": message}), HTTPStatus.SERVICE_UNAVAILABLE
 
     payload = request.get_json(force=True) or {}
     topic_base = (payload.get("topic_base") or "esp/setting/Control").strip()
@@ -319,7 +322,8 @@ def publish_to_device(device_id: int):
 
     if append_token:
         publish_topics = [topic]
-        mqtt_service.client.publish(topic, payload_text, qos=0, retain=False)
+        if not mqtt_service._publish_topic(topic, payload_text, qos=0, retain=False):
+            return jsonify({"message": "Unable to publish to MQTT broker"}), HTTPStatus.SERVICE_UNAVAILABLE
     else:
         publish_topics = mqtt_service.publish_device_payload(
             device,
@@ -327,6 +331,8 @@ def publish_to_device(device_id: int):
             payload_text,
             fallback_to_base=fallback_to_base,
         )
+        if not publish_topics:
+            return jsonify({"message": "Unable to publish to MQTT broker"}), HTTPStatus.SERVICE_UNAVAILABLE
 
     return jsonify(
         {
@@ -396,8 +402,11 @@ def request_reregister(device_id: int):
 @devices_bp.route("/discover", methods=["POST"])
 @jwt_required()
 def discover_device():
-    if not mqtt_service.client:
-        return jsonify({"message": "MQTT client not connected"}), HTTPStatus.SERVICE_UNAVAILABLE
+    if not mqtt_service.is_connected():
+        message = "MQTT broker unavailable; backend is still reconnecting"
+        if mqtt_service.last_connection_error:
+            message = f"{message} ({mqtt_service.last_connection_error})"
+        return jsonify({"message": message}), HTTPStatus.SERVICE_UNAVAILABLE
     payload = request.get_json(silent=True) or {}
     mac_address = (payload.get("mac_address") or payload.get("mac") or "").strip()
     token_value = (payload.get("token") or "").strip()

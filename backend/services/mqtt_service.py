@@ -20,6 +20,8 @@ class MQTTService:
     def __init__(self) -> None:
         self.client: Optional[mqtt.Client] = None
         self.app = None
+        self.connected = False
+        self.last_connection_error: str | None = None
         self.topics: list[str] = []
         self.fallback_topics: set[str] = set()
         self.discovery_topic = "esp/Entrance"
@@ -43,6 +45,7 @@ class MQTTService:
         self.pending_settings_lock = threading.Lock()
         self.pending_confirmations: dict[str, dict] = {}
         self.pending_confirmation_lock = threading.Lock()
+        self.connect_retry_delay = 5
 
     def init_app(self, app) -> None:
         self.app = app
@@ -63,7 +66,10 @@ class MQTTService:
             self.client.tls_insecure_set(bool(app.config.get("MQTT_TLS_INSECURE")))
 
         self.client.on_connect = self._on_connect
+        self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
+        self.connect_retry_delay = max(1, int(app.config.get("MQTT_CONNECT_RETRY_DELAY", 5) or 5))
+        self.client.reconnect_delay_set(min_delay=1, max_delay=self.connect_retry_delay)
         self.discovery_interval = int(app.config.get("MQTT_DISCOVERY_INTERVAL", 0) or 0)
         self.settings_poll_interval = int(app.config.get("MQTT_SETTINGS_POLL_INTERVAL", 0) or 0)
         self.device_prune_hours = int(app.config.get("DEVICE_PRUNE_HOURS", 24) or 24)
@@ -78,15 +84,31 @@ class MQTTService:
         }
 
         def _runner():
-            try:
-                self.client.connect(
-                    app.config.get("MQTT_BROKER_URL"),
-                    int(app.config.get("MQTT_BROKER_PORT", 1883)),
-                    keepalive=60,
-                )
-                self.client.loop_forever()
-            except Exception as exc:  # noqa: BLE001
-                app.logger.exception("MQTT connection error: %s", exc)
+            broker_url = app.config.get("MQTT_BROKER_URL")
+            broker_port = int(app.config.get("MQTT_BROKER_PORT", 1883))
+            while True:
+                try:
+                    self.client.connect(broker_url, broker_port, keepalive=60)
+                    result = self.client.loop_forever()
+                    self.connected = False
+                    self.last_connection_error = "MQTT loop exited unexpectedly"
+                    app.logger.warning(
+                        "MQTT loop exited for %s:%s with rc=%s; retrying in %ss",
+                        broker_url,
+                        broker_port,
+                        result,
+                        self.connect_retry_delay,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    self.connected = False
+                    self.last_connection_error = str(exc)
+                    app.logger.exception(
+                        "MQTT connection error to %s:%s; retrying in %ss",
+                        broker_url,
+                        broker_port,
+                        self.connect_retry_delay,
+                    )
+                time.sleep(self.connect_retry_delay)
 
         threading.Thread(target=_runner, daemon=True).start()
         self._start_discovery_loop()
@@ -126,13 +148,35 @@ class MQTTService:
             return [str(topic).strip() for topic in value if str(topic).strip()]
         return []
 
-    def _on_connect(self, client, userdata, flags, reason_code):  # noqa: D401
+    def _on_connect(self, client, userdata, flags, reason_code, properties=None):  # noqa: D401
         if reason_code == 0:
+            self.connected = True
+            self.last_connection_error = None
             for topic in self.topics:
                 client.subscribe(topic)
             self.app.logger.info("Connected to MQTT. Listening on %s", ", ".join(self.topics))
         else:
+            self.connected = False
+            self.last_connection_error = f"connect failed: {reason_code}"
             self.app.logger.error("MQTT connection failed: code=%s", reason_code)
+
+    def _on_disconnect(self, client, userdata, reason_code, properties=None):  # noqa: D401
+        self.connected = False
+        self.last_connection_error = f"disconnected: {reason_code}"
+        if self.app:
+            self.app.logger.warning("MQTT disconnected: code=%s", reason_code)
+
+    def is_connected(self) -> bool:
+        return bool(self.client and self.connected)
+
+    def _publish_topic(self, topic: str, payload_text: str, *, qos: int = 0, retain: bool = False) -> bool:
+        if not self.is_connected():
+            return False
+        publish_info = self.client.publish(topic, payload_text, qos=qos, retain=retain)
+        ok = publish_info.rc == mqtt.MQTT_ERR_SUCCESS
+        if not ok and self.app:
+            self.app.logger.warning("MQTT publish failed for %s: rc=%s", topic, publish_info.rc)
+        return ok
 
     def _on_message(self, client, userdata, msg):
         if not self.app:
@@ -269,15 +313,14 @@ class MQTTService:
         self._emit_log(log, device)
 
     def publish_discover(self, topic: str | None = None) -> bool:
-        if not self.client:
+        if not self.is_connected():
             return False
         payload = {"cmd": "DISCOVER"}
         target_topic = topic or self.discovery_topic
-        self.client.publish(target_topic, json.dumps(payload), qos=0, retain=False)
-        return True
+        return self._publish_topic(target_topic, json.dumps(payload), qos=0, retain=False)
 
     def request_registration(self, mac_address: str, token: str, topic: str | None = None) -> bool:
-        if not self.client:
+        if not self.is_connected():
             return False
         mac_value = self._coerce_str(mac_address)
         token_value = self._coerce_str(token)
@@ -312,7 +355,7 @@ class MQTTService:
                 if not device:
                     return False
                 self._clear_session_code(device)
-                if device.token and device.token.token and self.client:
+                if device.token and device.token.token and self.is_connected():
                     try:
                         token_value = self._coerce_str(device.token.token)
                         self._register_settings_request(device)
@@ -360,11 +403,14 @@ class MQTTService:
                 return False
 
         device = self._register_device_from_registration(mac_value, token_value)
-        if device and self.client:
+        if device and self.is_connected():
             session_code = self._generate_session_code()
             self._store_session_code(device, session_code)
             confirm_message = f"Confirm-{session_code}-{token_value}"
-            self.client.publish(self.discovery_topic, confirm_message, qos=0, retain=False)
+            if not self._publish_topic(self.discovery_topic, confirm_message, qos=0, retain=False):
+                if self.app:
+                    self.app.logger.warning("Failed to publish registration confirmation for %s", mac_value)
+                return True
             if self.app:
                 self.app.logger.info("Registration confirmed for %s with code %s", mac_value, session_code)
             socketio.emit(
@@ -503,7 +549,7 @@ class MQTTService:
         def _loop():
             while True:
                 try:
-                    if self.client and self.client.is_connected():
+                    if self.is_connected():
                         self.publish_discover()
                 except Exception as exc:  # noqa: BLE001
                     if self.app:
@@ -520,7 +566,7 @@ class MQTTService:
         def _loop():
             while True:
                 try:
-                    if self.client and self.client.is_connected():
+                    if self.is_connected():
                         with self.app.app_context():
                             self._prune_pending_confirmations()
                             devices = (
@@ -617,7 +663,7 @@ class MQTTService:
         return ips
 
     def _sync_blacklist_to_device(self, device: Device, blacklist_ips: list[str]) -> None:
-        if not self.client or not device or not blacklist_ips:
+        if not self.is_connected() or not device or not blacklist_ips:
             return
         token_value = device.token.token if device.token else None
         if not token_value:
@@ -849,7 +895,7 @@ class MQTTService:
         return bool(getattr(settings, "auto_block_enabled", True))
 
     def _sync_blocked_ip_to_device(self, device: Device, ip_address: str) -> None:
-        if not self.client:
+        if not self.is_connected():
             return
         token_value = device.token.token if device.token else None
         if not token_value:
@@ -891,7 +937,7 @@ class MQTTService:
             self.pending_blocks.pop(device.id, None)
         else:
             # Request fresh settings so we can merge with full payload
-            if self.client:
+            if self.is_connected():
                 self._register_settings_request(device)
                 self.publish_device_payload(
                     device,
@@ -900,7 +946,7 @@ class MQTTService:
                 )
 
     def _apply_blocklist_update(self, device: Device, pending: set[str], cached: dict) -> None:
-        if not self.client:
+        if not self.is_connected():
             return
         token_value = device.token.token if device.token else None
         if not token_value:
@@ -1102,7 +1148,7 @@ class MQTTService:
         qos: int = 0,
         retain: bool = False,
     ) -> list[str]:
-        if not self.client or not device:
+        if not self.is_connected() or not device:
             return []
 
         normalized_topic = self._coerce_str(topic_base) or "esp/setting/Control"
@@ -1114,9 +1160,12 @@ class MQTTService:
             publish_topics.append(normalized_topic)
         publish_topics = list(dict.fromkeys([topic for topic in publish_topics if topic]))
 
-        for publish_topic in publish_topics:
-            self.client.publish(publish_topic, payload_text, qos=qos, retain=retain)
-        return publish_topics
+        published_topics = [
+            publish_topic
+            for publish_topic in publish_topics
+            if self._publish_topic(publish_topic, payload_text, qos=qos, retain=retain)
+        ]
+        return published_topics
 
     def _normalize_mqtt_whitelist(self, value) -> list[str]:
         if value is None:
@@ -1130,7 +1179,7 @@ class MQTTService:
         return [item for item in items if item]
 
     def _sync_mqtt_whitelist_for_user(self, user_id: int) -> None:
-        if not self.client:
+        if not self.is_connected():
             return
         now = time.time()
         last = self.last_whitelist_sync.get(user_id, 0)
