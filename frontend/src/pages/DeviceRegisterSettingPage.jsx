@@ -569,7 +569,7 @@ const DeviceRegisterSettingPage = () => {
     <div className="space-y-6 text-slate-900" style={{ colorScheme: 'light' }}>
       <header className="flex flex-col gap-4 rounded-3xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-6 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold sm:text-4xl">Device Register/Setting</h1>
+          <h1 className="text-3xl font-semibold sm:text-4xl">Device Register & Setting</h1>
           <p className="mt-2 text-sm text-white/80">
             Manage Wi-Fi and MQTT credentials for every TinyIDS ESP32 sensor.
           </p>

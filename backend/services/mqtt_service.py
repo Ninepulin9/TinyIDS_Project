@@ -315,13 +315,11 @@ class MQTTService:
                 if device.token and device.token.token and self.client:
                     try:
                         token_value = self._coerce_str(device.token.token)
-                        control_topic = self._control_topic_for_device(device)
                         self._register_settings_request(device)
-                        self.client.publish(
-                            control_topic,
+                        self.publish_device_payload(
+                            device,
+                            "esp/setting/Control",
                             f"showsetting-{token_value}",
-                            qos=0,
-                            retain=False,
                         )
                         if self.app:
                             self.app.logger.info(
@@ -418,13 +416,11 @@ class MQTTService:
             self._store_session_code(device, ack_id)
 
         try:
-            control_topic = self._control_topic_for_device(device)
             self._register_settings_request(device)
-            self.client.publish(
-                control_topic,
+            self.publish_device_payload(
+                device,
+                "esp/setting/Control",
                 f"showsetting-{token_value}",
-                qos=0,
-                retain=False,
             )
             if self.app:
                 self.app.logger.info("Requested settings after register ack for %s", token_value)
@@ -546,13 +542,11 @@ class MQTTService:
                                         user_id, device.id
                                     )
                                 # Request latest settings (same as Rule Management)
-                                control_topic = self._control_topic_for_device(device)
                                 self._register_settings_request(device)
-                                self.client.publish(
-                                    control_topic,
+                                self.publish_device_payload(
+                                    device,
+                                    "esp/setting/Control",
                                     f"showsetting-{token_value}",
-                                    qos=0,
-                                    retain=False,
                                 )
                                 if self.app:
                                     self.app.logger.info(
@@ -643,9 +637,8 @@ class MQTTService:
         payload["token"] = token_value
         payload["blocked_ips"] = merged
         self.latest_settings[device.id] = dict(payload)
-        topic = self._control_topic_for_device(device)
         try:
-            self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
+            self.publish_device_payload(device, "esp/setting/Control", json.dumps(payload))
             if self.app:
                 self.app.logger.info(
                     "Settings poll: synced %s blocked_ips to %s", len(merged), token_value
@@ -879,9 +872,8 @@ class MQTTService:
         payload["token"] = token_value
         payload["blocked_ips"] = blocked_list
         self.latest_settings[device.id] = dict(payload)
-        topic = self._control_topic_for_device(device)
         try:
-            self.client.publish(topic, json.dumps(payload), qos=0, retain=False)
+            self.publish_device_payload(device, "esp/setting/Control", json.dumps(payload))
         except Exception as exc:  # noqa: BLE001
             if self.app:
                 self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
@@ -900,13 +892,11 @@ class MQTTService:
         else:
             # Request fresh settings so we can merge with full payload
             if self.client:
-                control_topic = self._control_topic_for_device(device)
                 self._register_settings_request(device)
-                self.client.publish(
-                    control_topic,
+                self.publish_device_payload(
+                    device,
+                    "esp/setting/Control",
                     f"showsetting-{token_value}",
-                    qos=0,
-                    retain=False,
                 )
 
     def _apply_blocklist_update(self, device: Device, pending: set[str], cached: dict) -> None:
@@ -928,8 +918,7 @@ class MQTTService:
         payload["blocked_ips"] = merged
         self.latest_settings[device.id] = dict(payload)
         try:
-            control_topic = self._control_topic_for_device(device)
-            self.client.publish(control_topic, json.dumps(payload), qos=0, retain=False)
+            self.publish_device_payload(device, "esp/setting/Control", json.dumps(payload))
         except Exception as exc:  # noqa: BLE001
             if self.app:
                 self.app.logger.warning("Failed to sync blocked_ips for %s: %s", token_value, exc)
@@ -1077,6 +1066,58 @@ class MQTTService:
             return f"test/data-{code}"
         return "test/data"
 
+    def _resolved_publish_topic_for_device(self, device: Device, topic_base: str) -> str:
+        normalized_topic = self._coerce_str(topic_base) or "esp/setting/Control"
+        topic_key = normalized_topic.lower()
+        token_value = self._coerce_str(device.token.token) if device and device.token else None
+        if token_value and topic_key == "esp/setting/control":
+            return self._control_topic_for_device(device)
+        if token_value and topic_key == "esp/alive/check":
+            return self._alive_topic_for_device(device)
+        if token_value and topic_key == "esp/alive/setting":
+            return self._alive_setting_topic_for_device(device)
+        if token_value and topic_key in {"test/data", "test/data/led"}:
+            return self._data_topic_for_device(device)
+        return normalized_topic
+
+    def _should_fallback_to_base_topic(self, topic_base: str) -> bool:
+        normalized_topic = self._coerce_str(topic_base)
+        if not normalized_topic:
+            return False
+        return normalized_topic.lower() in {
+            "esp/setting/control",
+            "esp/alive/check",
+            "esp/alive/setting",
+            "test/data",
+            "test/data/led",
+        }
+
+    def publish_device_payload(
+        self,
+        device: Device,
+        topic_base: str,
+        payload_text: str,
+        *,
+        fallback_to_base: bool | None = None,
+        qos: int = 0,
+        retain: bool = False,
+    ) -> list[str]:
+        if not self.client or not device:
+            return []
+
+        normalized_topic = self._coerce_str(topic_base) or "esp/setting/Control"
+        resolved_topic = self._resolved_publish_topic_for_device(device, normalized_topic)
+        include_base = self._should_fallback_to_base_topic(normalized_topic) if fallback_to_base is None else bool(fallback_to_base)
+
+        publish_topics = [resolved_topic]
+        if include_base and normalized_topic and normalized_topic != resolved_topic:
+            publish_topics.append(normalized_topic)
+        publish_topics = list(dict.fromkeys([topic for topic in publish_topics if topic]))
+
+        for publish_topic in publish_topics:
+            self.client.publish(publish_topic, payload_text, qos=qos, retain=retain)
+        return publish_topics
+
     def _normalize_mqtt_whitelist(self, value) -> list[str]:
         if value is None:
             return []
@@ -1177,8 +1218,7 @@ class MQTTService:
             payload["token"] = token_value
             payload["g_mqtt_whitelist"] = union_topics
             self.latest_settings[device.id] = dict(payload)
-            control_topic = self._control_topic_for_device(device)
-            self.client.publish(control_topic, json.dumps(payload), qos=0, retain=False)
+            self.publish_device_payload(device, "esp/setting/Control", json.dumps(payload))
 
 
 

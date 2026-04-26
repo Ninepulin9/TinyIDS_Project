@@ -278,7 +278,8 @@ def publish_to_device(device_id: int):
     message = payload.get("message")
     json_payload = payload.get("payload")
     append_token = payload.get("append_token", True)
-    fallback_to_base = bool(payload.get("fallback_to_base", False))
+    raw_fallback_to_base = payload.get("fallback_to_base")
+    fallback_to_base = None if raw_fallback_to_base is None else bool(raw_fallback_to_base)
     token_value = device.token.token if device.token else None
 
     if append_token:
@@ -302,6 +303,8 @@ def publish_to_device(device_id: int):
         message = json.dumps(message)
 
     if json_payload is not None:
+        if isinstance(json_payload, dict) and token_value and not json_payload.get("token"):
+            json_payload = {**json_payload, "token": token_value}
         try:
             payload_text = json.dumps(json_payload)
         except Exception:
@@ -314,13 +317,16 @@ def publish_to_device(device_id: int):
             mqtt_service._register_settings_request(device)
             fallback_to_base = True
 
-    publish_topics = [topic]
-    if fallback_to_base and not append_token and topic_base and topic_base != topic:
-        publish_topics.append(topic_base)
-    publish_topics = list(dict.fromkeys(publish_topics))
-
-    for publish_topic in publish_topics:
-        mqtt_service.client.publish(publish_topic, payload_text, qos=0, retain=False)
+    if append_token:
+        publish_topics = [topic]
+        mqtt_service.client.publish(topic, payload_text, qos=0, retain=False)
+    else:
+        publish_topics = mqtt_service.publish_device_payload(
+            device,
+            topic_base,
+            payload_text,
+            fallback_to_base=fallback_to_base,
+        )
 
     return jsonify(
         {

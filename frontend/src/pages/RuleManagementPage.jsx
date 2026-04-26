@@ -610,23 +610,27 @@ const RuleManagementPage = () => {
     requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
     setLoadingRules(true)
     setRuleValues({ ...defaultRuleState, token: deviceToken })
+    const macValue = selectedDevice?.mac_address || selectedDevice?.esp_id
+    const queueRediscovery = () => {
+      if (!macValue) return
+      ;[0, 2500, 5000].forEach((delayMs) => {
+        setTimeout(() => {
+          api.post('/api/devices/discover', {
+            mac_address: macValue,
+            token: deviceToken,
+          }).catch(() => {
+            // ignore retry errors; settings polling continues below
+          })
+        }, delayMs)
+      })
+    }
     try {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
         message: `showsetting-default-${deviceToken}`,
         append_token: false,
       })
-      const macValue = selectedDevice?.mac_address || selectedDevice?.esp_id
-      if (macValue) {
-        try {
-          await api.post('/api/devices/discover', {
-            mac_address: macValue,
-            token: deviceToken,
-          })
-        } catch {
-          // ignore re-register errors; settings poll will still run
-        }
-      }
+      queueRediscovery()
       // Ask for the full settings payload after default reset (delayed)
       setAwaitingToken(deviceToken)
       stopPolling()
