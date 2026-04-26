@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 
-from extensions import db
+from extensions import db, socketio
 from models import Blacklist, Device, DeviceToken
 from services.mqtt_service import mqtt_service
 
@@ -50,6 +50,18 @@ def _serialize_entry(entry) -> dict:
 
 def _is_valid_ip(value: str) -> bool:
     return bool(re.match(r"^(?:\d{1,3}\.){3}\d{1,3}$", value))
+
+
+def _emit_blacklist_update(action: str, device_id: int | None, ip_address: str, reason: str | None = None) -> None:
+    socketio.emit(
+        "blacklist:updated",
+        {
+            "action": action,
+            "device_id": device_id,
+            "ip_address": ip_address,
+            "reason": reason,
+        },
+    )
 
 
 def _raw_blacklist_rows():
@@ -138,6 +150,8 @@ def add_blacklist_entry():
             # Swallow MQTT sync errors; entry already recorded.
             pass
 
+    _emit_blacklist_update("blocked", device.id if device else None, ip_address, reason)
+
     return jsonify({"entry": _serialize_entry(entry), "synced": bool(device)})
 
 
@@ -153,10 +167,50 @@ def delete_blacklist_entry(entry_id: int):
         if not entry:
             return jsonify({"message": "Blacklist entry not found"}), HTTPStatus.NOT_FOUND
 
-        db.session.delete(entry)
+        device_id = entry.device_id
+        ip_address = entry.ip_address
+        delete_query = Blacklist.query.filter(
+            Blacklist.user_id == user_id,
+            Blacklist.ip_address == ip_address,
+        )
+        if device_id is None:
+            delete_query = delete_query.filter(Blacklist.device_id.is_(None))
+        else:
+            delete_query = delete_query.filter(Blacklist.device_id == device_id)
+
+        for duplicate in delete_query.all():
+            db.session.delete(duplicate)
         db.session.commit()
+        _emit_blacklist_update("unblocked", device_id, ip_address)
         return "", HTTPStatus.NO_CONTENT
     except (OperationalError, ProgrammingError):
-        db.session.execute(text("DELETE FROM blacklist WHERE id = :entry_id"), {"entry_id": entry_id})
+        entry_row = db.session.execute(
+            text(
+                "SELECT user_id, device_id, ip_address FROM blacklist WHERE id = :entry_id LIMIT 1"
+            ),
+            {"entry_id": entry_id},
+        ).first()
+        if not entry_row or int(entry_row.user_id) != user_id:
+            return jsonify({"message": "Blacklist entry not found"}), HTTPStatus.NOT_FOUND
+
+        if entry_row.device_id is None:
+            db.session.execute(
+                text(
+                    "DELETE FROM blacklist WHERE user_id = :user_id AND ip_address = :ip_address AND device_id IS NULL"
+                ),
+                {"user_id": user_id, "ip_address": entry_row.ip_address},
+            )
+        else:
+            db.session.execute(
+                text(
+                    "DELETE FROM blacklist WHERE user_id = :user_id AND ip_address = :ip_address AND device_id = :device_id"
+                ),
+                {
+                    "user_id": user_id,
+                    "ip_address": entry_row.ip_address,
+                    "device_id": entry_row.device_id,
+                },
+            )
         db.session.commit()
+        _emit_blacklist_update("unblocked", entry_row.device_id, entry_row.ip_address)
         return "", HTTPStatus.NO_CONTENT

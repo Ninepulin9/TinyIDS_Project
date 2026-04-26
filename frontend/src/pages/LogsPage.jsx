@@ -539,15 +539,53 @@ const LogsPage = () => {
       }
     }
 
+    const handleBlacklistUpdated = (payload) => {
+      const action = String(payload?.action ?? '').trim().toLowerCase()
+      const deviceId = payload?.device_id != null ? String(payload.device_id) : null
+      const ip = String(payload?.ip_address ?? '').trim().toLowerCase()
+
+      if (action === 'unblocked' && deviceId && ip) {
+        pendingBlockRef.current.delete(`${deviceId}|${ip}`)
+        setBlacklistByDevice((prev) => {
+          const next = new Map(prev)
+          const existing = next.get(deviceId)
+          if (!existing) return next
+          const updated = new Set(existing)
+          updated.delete(ip)
+          if (updated.size > 0) {
+            next.set(deviceId, updated)
+          } else {
+            next.delete(deviceId)
+          }
+          return next
+        })
+      }
+
+      if (action === 'blocked' && deviceId && ip) {
+        pendingBlockRef.current.set(`${deviceId}|${ip}`, Date.now())
+        setBlacklistByDevice((prev) => {
+          const next = new Map(prev)
+          const updated = new Set(next.get(deviceId) ?? [])
+          updated.add(ip)
+          next.set(deviceId, updated)
+          return next
+        })
+      }
+
+      fetchBlacklistIps({ force: true })
+    }
+
     const handleConnect = () => {
       fetchLatest({ silent: true }).catch(() => {})
     }
     socket.on('connect', handleConnect)
     socket.on('log:new', handleLogNew)
+    socket.on('blacklist:updated', handleBlacklistUpdated)
     socket.on('device:registered', fetchDevices)
     return () => {
       socket.off('connect', handleConnect)
       socket.off('log:new', handleLogNew)
+      socket.off('blacklist:updated', handleBlacklistUpdated)
       socket.off('device:registered', fetchDevices)
     }
   }, [autoBlockEnabled, fetchBlacklistIps, fetchDevices, queueAutoBlockIps, tokenIdMap])
