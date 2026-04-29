@@ -913,10 +913,10 @@ const RuleManagementPage = () => {
               <button
                 type="button"
                 onClick={closeDrawer}
-                className="rounded-full p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                className="rounded-full p-2 text-slate-900 transition hover:bg-slate-100 hover:text-black"
                 aria-label="Close"
               >
-                <span className="block px-1 text-lg leading-none">×</span>
+                <span className="block px-1 text-3xl font-semibold leading-none">&times;</span>
               </button>
             </div>
 
