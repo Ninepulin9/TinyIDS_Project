@@ -214,6 +214,7 @@ const LogsPage = () => {
   const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
   const isMountedRef = useRef(false)
+  const refreshPageDataRef = useRef(null)
   const blacklistRequestRef = useRef(0)
   const pendingBlockRef = useRef(new Map())
   const pendingBlockTtlMs = 60000
@@ -456,8 +457,16 @@ const LogsPage = () => {
   )
 
   useEffect(() => {
+    refreshPageDataRef.current = refreshPageData
+  }, [refreshPageData])
+
+  useEffect(() => {
     isMountedRef.current = true
-    refreshPageData({ silent: false })
+    Promise.allSettled([
+      fetchLatest({ silent: false }),
+      fetchDevices(),
+      fetchBlacklistIps({ force: true }),
+    ])
     api
       .get('/api/settings/system')
       .then(({ data }) => {
@@ -470,7 +479,7 @@ const LogsPage = () => {
     return () => {
       isMountedRef.current = false
     }
-  }, [refreshPageData])
+  }, [])
 
   useEffect(() => {
     if (autoBlockEnabled) {
@@ -531,7 +540,7 @@ const LogsPage = () => {
       const ip = String(payload?.ip_address ?? '').trim().toLowerCase()
 
       if (!deviceId || !ip || !['blocked', 'unblocked'].includes(action)) {
-        refreshPageData({ silent: true })
+        refreshPageDataRef.current?.({ silent: true })
         return
       }
 
@@ -565,21 +574,19 @@ const LogsPage = () => {
     }
 
     const handleConnect = () => {
-      refreshPageData({ silent: true })
+      refreshPageDataRef.current?.({ silent: true })
     }
     socket.on('connect', handleConnect)
     socket.on('log:new', handleLogNew)
     socket.on('blacklist:updated', handleBlacklistUpdated)
     socket.on('device:registered', fetchDevices)
-    socket.on('device:updated', fetchDevices)
     return () => {
       socket.off('connect', handleConnect)
       socket.off('log:new', handleLogNew)
       socket.off('blacklist:updated', handleBlacklistUpdated)
       socket.off('device:registered', fetchDevices)
-      socket.off('device:updated', fetchDevices)
     }
-  }, [autoBlockEnabled, fetchDevices, queueAutoBlockIps, refreshPageData, tokenIdMap])
+  }, [autoBlockEnabled, fetchDevices, queueAutoBlockIps, tokenIdMap])
 
   const resolveBlockedSet = useCallback(
     (deviceId) => {

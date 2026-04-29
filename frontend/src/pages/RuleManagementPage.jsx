@@ -292,6 +292,10 @@ const RuleManagementPage = () => {
   }
 
   const closeDrawer = () => {
+    stopPolling()
+    setAwaitingToken('')
+    setLoadingRules(false)
+    requestMetaRef.current = { token: '', requestedAt: 0 }
     setDrawerOpen(false)
     setSelectedDevice(null)
     setRuleValues(defaultRuleState)
@@ -410,6 +414,24 @@ const RuleManagementPage = () => {
     }
   }
 
+  const startSettingsPolling = (deviceToken, deviceId, timeoutMessage = 'Device did not respond in time.') => {
+    stopPolling()
+    pollRef.current.timer = setInterval(async () => {
+      pollRef.current.attempts += 1
+      if (pollRef.current.attempts >= maxPollAttempts) {
+        stopPolling()
+        setAwaitingToken('')
+        setLoadingRules(false)
+        toast.error(timeoutMessage)
+        return
+      }
+      const done = await pollSettingsOnce(deviceToken, deviceId)
+      if (done) {
+        stopPolling()
+      }
+    }, pollIntervalMs)
+  }
+
   const validate = () => {
     const errors = {}
     if (!ruleValues.token.trim()) errors.token = 'Token is required'
@@ -514,21 +536,7 @@ const RuleManagementPage = () => {
       ) {
         setLoadingRules(true)
         setAwaitingToken(deviceToken)
-        stopPolling()
-        pollRef.current.timer = setInterval(async () => {
-          pollRef.current.attempts += 1
-          if (pollRef.current.attempts >= maxPollAttempts) {
-            stopPolling()
-            setAwaitingToken('')
-            setLoadingRules(false)
-            toast.error('Device did not respond in time.')
-            return
-          }
-          const done = await pollSettingsOnce(deviceToken, targetDevice.id)
-          if (done) {
-            stopPolling()
-          }
-        }, pollIntervalMs)
+        startSettingsPolling(deviceToken, targetDevice.id)
         return
       }
     lastSettingsRequestRef.current = { token: deviceToken, time: now }
@@ -541,21 +549,7 @@ const RuleManagementPage = () => {
         message: `showsetting-${deviceToken}`,
         append_token: false,
       })
-      stopPolling()
-      pollRef.current.timer = setInterval(async () => {
-        pollRef.current.attempts += 1
-        if (pollRef.current.attempts >= maxPollAttempts) {
-          stopPolling()
-          setAwaitingToken('')
-          setLoadingRules(false)
-          toast.error('Device did not respond in time.')
-          return
-        }
-        const done = await pollSettingsOnce(deviceToken, targetDevice.id)
-        if (done) {
-          stopPolling()
-        }
-      }, pollIntervalMs)
+      startSettingsPolling(deviceToken, targetDevice.id)
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to request settings'
       toast.error(message)
@@ -605,18 +599,34 @@ const RuleManagementPage = () => {
       toast.error('No token found for this device.')
       return
     }
+    const previousRuleValues = ruleValues
     stopPolling()
-    setAwaitingToken('')
-    setLoadingRules(false)
+    requestMetaRef.current = { token: deviceToken, requestedAt: Date.now() }
+    lastSettingsRequestRef.current = { token: '', time: 0 }
+    setAwaitingToken(deviceToken)
+    setLoadingRules(true)
+    setRuleValues({
+      ...defaultRuleState,
+      token: deviceToken,
+      map_ip_mac_address: [],
+    })
     try {
       await api.post(`/api/devices/${selectedDevice.id}/publish`, {
         topic_base: 'esp/setting/Control',
         message: `showsetting-default-${deviceToken}`,
         append_token: false,
       })
+      startSettingsPolling(
+        deviceToken,
+        selectedDevice.id,
+        'Reset sent, but updated settings did not arrive in time.',
+      )
       toast.success('Reset command sent to device')
     } catch (err) {
       const message = err?.response?.data?.message ?? err?.message ?? 'Unable to send reset command'
+      setRuleValues(previousRuleValues)
+      setAwaitingToken('')
+      setLoadingRules(false)
       toast.error(message)
     }
   }
