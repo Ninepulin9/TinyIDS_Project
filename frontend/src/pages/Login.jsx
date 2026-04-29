@@ -211,14 +211,14 @@ const Login = ({ onSubmit, loading: externalLoading }) => {
                 type="button"
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full rounded-xl bg-blue-500 py-3.5 text-base font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl bg-blue-500 py-4 text-lg font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? 'Signing in...' : 'Sign in'}
               </button>
             </div>
-            <div className="mt-8 border-t border-gray-200 pt-5 text-center text-sm text-gray-600">
+            <div className="mt-8 border-t border-gray-200 pt-5 text-center text-base text-gray-600">
               Don't have an account?{' '}
-              <Link to="/register" className="font-semibold text-blue-500 hover:text-blue-600">
+              <Link to="/register" className="font-bold text-blue-500 hover:text-blue-600">
                 Create your own
               </Link>
             </div>

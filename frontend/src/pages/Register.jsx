@@ -373,15 +373,15 @@ const Register = () => {
                 type="button"
                 onClick={handleSubmit}
                 disabled={loading || !allChecksPassed}
-                className="w-full rounded-xl bg-gradient-to-r from-blue-400 to-cyan-400 py-3.5 text-base font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-xl bg-gradient-to-r from-blue-400 to-cyan-400 py-4 text-lg font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? 'Creating account...' : 'Sign up'}
               </button>
             </div>
 
-            <div className="mt-8 border-t border-gray-200 pt-5 text-center text-sm text-gray-600">
+            <div className="mt-8 border-t border-gray-200 pt-5 text-center text-base text-gray-600">
               Already have an account?{' '}
-              <Link to="/login" className="font-semibold text-blue-500 hover:text-blue-600">
+              <Link to="/login" className="font-bold text-blue-500 hover:text-blue-600">
                 Sign in
               </Link>
             </div>
