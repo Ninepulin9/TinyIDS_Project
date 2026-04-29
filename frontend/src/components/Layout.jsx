@@ -198,28 +198,6 @@ const Layout = ({ onLogout, user }) => {
     }
   }, [attackNotifyEnabled])
 
-  useEffect(() => {
-    let timer = null
-    const pollLatest = async () => {
-      if (!attackNotifyEnabled) return
-      try {
-        const { data } = await api.get('/api/logs', { params: { limit: 1 } })
-        const latest = Array.isArray(data) ? data[0] : null
-        if (!latest) return
-        if (lastAlertIdRef.current === latest.id) return
-        lastAlertIdRef.current = latest.id
-        emitAlertToast(latest)
-      } catch {
-        // ignore polling errors
-      }
-    }
-    pollLatest()
-    timer = setInterval(pollLatest, 5000)
-    return () => {
-      if (timer) clearInterval(timer)
-    }
-  }, [attackNotifyEnabled])
-
   return (
   <div className="flex min-h-screen bg-slate-100 text-slate-900">
     <aside className="hidden h-screen w-72 flex-shrink-0 flex-col overflow-y-auto bg-white shadow-xl lg:sticky lg:top-0 lg:flex">

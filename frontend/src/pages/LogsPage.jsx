@@ -214,8 +214,6 @@ const LogsPage = () => {
   const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
   const isMountedRef = useRef(false)
-  const pollIntervalRef = useRef(null)
-  const fetchLatestRef = useRef(null)
   const blacklistRequestRef = useRef(0)
   const pendingBlockRef = useRef(new Map())
   const pendingBlockTtlMs = 60000
@@ -367,7 +365,6 @@ const LogsPage = () => {
           next.set(String(resolvedDeviceId), set)
           return next
         })
-        await fetchBlacklistIps({ force: true })
       } catch (err) {
         const message =
           err?.response?.data?.message ?? err?.message ?? `Failed to block ${ipValue}`
@@ -380,7 +377,7 @@ const LogsPage = () => {
         })
       }
     },
-    [fetchBlacklistIps, tokenIdMap],
+    [tokenIdMap],
   )
 
   const fetchLatest = useCallback(
@@ -447,14 +444,20 @@ const LogsPage = () => {
     }
   }, [dedupeDevices])
 
-  useEffect(() => {
-    fetchLatestRef.current = fetchLatest
-  }, [fetchLatest])
+  const refreshPageData = useCallback(
+    async ({ silent = false } = {}) => {
+      await Promise.allSettled([
+        fetchLatest({ silent }),
+        fetchDevices(),
+        fetchBlacklistIps({ force: true }),
+      ])
+    },
+    [fetchBlacklistIps, fetchDevices, fetchLatest],
+  )
 
   useEffect(() => {
     isMountedRef.current = true
-    fetchLatestRef.current?.({ silent: false })
-    fetchDevices()
+    refreshPageData({ silent: false })
     api
       .get('/api/settings/system')
       .then(({ data }) => {
@@ -467,19 +470,7 @@ const LogsPage = () => {
     return () => {
       isMountedRef.current = false
     }
-  }, [fetchDevices])
-
-  useEffect(() => {
-    pollIntervalRef.current = setInterval(() => {
-      fetchLatestRef.current?.({ silent: true }).catch(() => {})
-    }, 5000)
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-        pollIntervalRef.current = null
-      }
-    }
-  }, [])
+  }, [refreshPageData])
 
   useEffect(() => {
     if (autoBlockEnabled) {
@@ -520,23 +511,17 @@ const LogsPage = () => {
       setLogs((prev) => mergeLogs([normalized], prev))
       queueAutoBlockIps([normalized])
       const topic = String(normalized?.payload?._mqtt_topic ?? '').toLowerCase()
-      if (topic === 'esp/setting/now') {
-        fetchBlacklistIps()
-      }
-      if (topic === 'esp/alert') {
-        const source = String(normalized?.source_ip ?? '').trim().toLowerCase()
-        const resolvedId = resolveDeviceId(normalized, tokenIdMap)
-        if (autoBlockEnabled && source && isValidIp(source) && resolvedId) {
-          pendingBlockRef.current.set(`${resolvedId}|${source}`, Date.now())
-          setBlacklistByDevice((prev) => {
-            const next = new Map(prev)
-            const set = next.get(String(resolvedId)) ?? new Set()
-            set.add(source)
-            next.set(String(resolvedId), set)
-            return next
-          })
-        }
-        fetchBlacklistIps()
+      const source = String(normalized?.source_ip ?? '').trim().toLowerCase()
+      const resolvedId = resolveDeviceId(normalized, tokenIdMap)
+      if (topic === 'esp/alert' && autoBlockEnabled && source && isValidIp(source) && resolvedId) {
+        pendingBlockRef.current.set(`${resolvedId}|${source}`, Date.now())
+        setBlacklistByDevice((prev) => {
+          const next = new Map(prev)
+          const set = next.get(String(resolvedId)) ?? new Set()
+          set.add(source)
+          next.set(String(resolvedId), set)
+          return next
+        })
       }
     }
 
@@ -545,7 +530,12 @@ const LogsPage = () => {
       const deviceId = payload?.device_id != null ? String(payload.device_id) : null
       const ip = String(payload?.ip_address ?? '').trim().toLowerCase()
 
-      if (action === 'unblocked' && deviceId && ip) {
+      if (!deviceId || !ip || !['blocked', 'unblocked'].includes(action)) {
+        refreshPageData({ silent: true })
+        return
+      }
+
+      if (action === 'unblocked') {
         pendingBlockRef.current.delete(`${deviceId}|${ip}`)
         setBlacklistByDevice((prev) => {
           const next = new Map(prev)
@@ -562,7 +552,7 @@ const LogsPage = () => {
         })
       }
 
-      if (action === 'blocked' && deviceId && ip) {
+      if (action === 'blocked') {
         pendingBlockRef.current.set(`${deviceId}|${ip}`, Date.now())
         setBlacklistByDevice((prev) => {
           const next = new Map(prev)
@@ -572,28 +562,24 @@ const LogsPage = () => {
           return next
         })
       }
-
-      fetchBlacklistIps({ force: true })
     }
 
     const handleConnect = () => {
-      fetchLatest({ silent: true }).catch(() => {})
+      refreshPageData({ silent: true })
     }
     socket.on('connect', handleConnect)
     socket.on('log:new', handleLogNew)
     socket.on('blacklist:updated', handleBlacklistUpdated)
     socket.on('device:registered', fetchDevices)
+    socket.on('device:updated', fetchDevices)
     return () => {
       socket.off('connect', handleConnect)
       socket.off('log:new', handleLogNew)
       socket.off('blacklist:updated', handleBlacklistUpdated)
       socket.off('device:registered', fetchDevices)
+      socket.off('device:updated', fetchDevices)
     }
-  }, [autoBlockEnabled, fetchBlacklistIps, fetchDevices, queueAutoBlockIps, tokenIdMap])
-
-  useEffect(() => {
-    fetchBlacklistIps({ force: true })
-  }, [fetchBlacklistIps])
+  }, [autoBlockEnabled, fetchDevices, queueAutoBlockIps, refreshPageData, tokenIdMap])
 
   const resolveBlockedSet = useCallback(
     (deviceId) => {
@@ -719,11 +705,7 @@ const LogsPage = () => {
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await Promise.allSettled([
-        fetchLatest({ silent: false }),
-        fetchDevices(),
-        fetchBlacklistIps({ force: true }),
-      ])
+      await refreshPageData({ silent: false })
     } finally {
       setRefreshing(false)
     }
