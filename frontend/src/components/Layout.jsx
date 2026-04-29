@@ -51,6 +51,7 @@ const Layout = ({ onLogout, user }) => {
   const subtitle = routeSubtitles[location.pathname] ?? 'TinyIDS Platform'
   const [showConfirm, setShowConfirm] = useState(false)
   const [attackNotifyEnabled, setAttackNotifyEnabled] = useState(true)
+  const [routeRefreshKey, setRouteRefreshKey] = useState(0)
   const lastToastRef = useRef({ key: '', at: 0 })
   const lastAlertIdRef = useRef(null)
 
@@ -243,14 +244,20 @@ const Layout = ({ onLogout, user }) => {
                 {section.title}
               </p>
               <div className="space-y-1">
-                {section.items.map(({ to, label, icon: Icon, disabled }) =>
-                  to && !disabled ? (
-                    <NavLink
-                      key={label}
-                      to={to}
-                      className={({ isActive }) =>
-                        `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition ${
-                          isActive
+	                {section.items.map(({ to, label, icon: Icon, disabled }) =>
+	                  to && !disabled ? (
+	                    <NavLink
+	                      key={label}
+	                      to={to}
+	                      onClick={(event) => {
+	                        if (location.pathname === to) {
+	                          event.preventDefault()
+	                          setRouteRefreshKey((prev) => prev + 1)
+	                        }
+	                      }}
+	                      className={({ isActive }) =>
+	                        `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition ${
+	                          isActive
                             ? 'bg-sky-500/10 text-sky-600 ring-1 ring-inset ring-sky-400'
                             : 'text-slate-500 hover:bg-slate-100'
                         }`
@@ -297,10 +304,10 @@ const Layout = ({ onLogout, user }) => {
           Sign out
         </button>
       </div>
-    </aside>
-    <main className="flex-1 px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
-      <Outlet />
-    </main>
+	    </aside>
+	    <main className="flex-1 px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
+	      <Outlet key={`${location.pathname}:${routeRefreshKey}`} />
+	    </main>
 
     {showConfirm && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">

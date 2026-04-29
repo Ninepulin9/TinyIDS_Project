@@ -228,13 +228,22 @@ class MQTTService:
             source_ip=source_ip,
             destination_ip=self._derive_ip(payload, "destination"),
         )
+        auto_block_created = False
+        auto_block_reason = None
         if source_ip and self._auto_block_allowed(device.user_id):
-            self._auto_block_ip(device.user_id, device.id, source_ip, enriched)
+            auto_block_created, auto_block_reason = self._auto_block_ip(
+                device.user_id,
+                device.id,
+                source_ip,
+                enriched,
+            )
             self._queue_block_for_device(device, source_ip)
         if event_time:
             log.created_at = event_time
         db.session.add(log)
         db.session.commit()
+        if auto_block_created:
+            self._emit_blacklist_update("blocked", device.id, source_ip, auto_block_reason)
         self._emit_log(log, device)
 
     def _handle_settings(self, payload: dict, topic: str) -> None:
@@ -703,6 +712,23 @@ class MQTTService:
         }
         socketio.emit("log:new", log_data)
 
+    def _emit_blacklist_update(
+        self,
+        action: str,
+        device_id: int | None,
+        ip_address: str,
+        reason: str | None = None,
+    ) -> None:
+        socketio.emit(
+            "blacklist:updated",
+            {
+                "action": action,
+                "device_id": device_id,
+                "ip_address": ip_address,
+                "reason": reason,
+            },
+        )
+
     def _resolve_device(self, payload: dict) -> Device | None:
         owner = User.query.first()
         owner_id = owner.id if owner else 1
@@ -866,10 +892,16 @@ class MQTTService:
                 return value
         return None
 
-    def _auto_block_ip(self, user_id: int, device_id: int | None, ip_address: str, payload: dict) -> None:
+    def _auto_block_ip(
+        self,
+        user_id: int,
+        device_id: int | None,
+        ip_address: str,
+        payload: dict,
+    ) -> tuple[bool, str | None]:
         ip_value = self._coerce_str(ip_address)
         if not ip_value:
-            return
+            return False, None
         existing = (
             Blacklist.query.filter(
                 Blacklist.user_id == user_id,
@@ -879,14 +911,14 @@ class MQTTService:
             .first()
         )
         if existing:
-            return
+            return False, existing.reason
         reason = payload.get("alert_msg") or payload.get("type") or "Auto-blocked from alert"
         db.session.add(
             Blacklist(
                 user_id=user_id, device_id=device_id, ip_address=ip_value, reason=str(reason)
             )
         )
-        return
+        return True, str(reason)
 
     def _auto_block_allowed(self, user_id: int) -> bool:
         settings = SystemSettings.query.filter_by(user_id=user_id).first()

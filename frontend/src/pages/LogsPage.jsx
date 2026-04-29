@@ -209,6 +209,7 @@ const LogsPage = () => {
   const [blacklistLoading, setBlacklistLoading] = useState(true)
   const [autoBlockEnabled, setAutoBlockEnabled] = useState(null)
   const [blockSubmitting, setBlockSubmitting] = useState(new Set())
+  const [refreshing, setRefreshing] = useState(false)
   const [page, setPage] = useState(1)
   const [sortDesc, setSortDesc] = useState(true)
   const pageSize = 15
@@ -715,6 +716,19 @@ const LogsPage = () => {
     })
   }, [timeFilteredLogs, timeframeDays])
 
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await Promise.allSettled([
+        fetchLatest({ silent: false }),
+        fetchDevices(),
+        fetchBlacklistIps({ force: true }),
+      ])
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <div className="space-y-7 text-slate-900" style={{ colorScheme: 'light' }}>
       <header className="rounded-3xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 px-6 py-7 text-white shadow-lg">
@@ -804,13 +818,13 @@ const LogsPage = () => {
       </section>
 
       <section className="rounded-3xl bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">Intrusion Log</h2>
-          </div>
-          <div className="flex w-full flex-wrap gap-3 sm:w-auto sm:flex-nowrap">
-            <div className="flex gap-2">
-              {[7, 30].map((days) => (
+	        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+	          <div>
+	            <h2 className="text-xl font-semibold text-slate-900">Intrusion Log</h2>
+	          </div>
+	          <div className="flex w-full flex-wrap gap-3 sm:w-auto sm:flex-nowrap">
+	            <div className="flex gap-2">
+	              {[7, 30].map((days) => (
                 <button
                   key={days}
                   type="button"
@@ -849,24 +863,32 @@ const LogsPage = () => {
             </div>
             <div className="relative flex-1 sm:w-72">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                value={query}
+	              <input
+	                type="search"
+	                value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search logs by device, severity, type..."
-                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 transition focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setSortDesc((prev) => !prev)}
-              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-300 hover:text-sky-500"
-              aria-label="Filter logs"
-            >
-              <Filter className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+	                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 transition focus:border-sky-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-sky-100"
+	              />
+	            </div>
+	            <button
+	              type="button"
+	              onClick={() => setSortDesc((prev) => !prev)}
+	              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-300 hover:text-sky-500"
+	              aria-label="Filter logs"
+	            >
+	              <Filter className="h-4 w-4" />
+	            </button>
+	            <button
+	              type="button"
+	              onClick={handleRefresh}
+	              disabled={loading || refreshing}
+	              className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+	            >
+	              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+	            </button>
+	          </div>
+	        </div>
 
         <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100">
           <table className="min-w-full divide-y divide-slate-100 text-sm">
