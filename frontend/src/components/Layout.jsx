@@ -123,16 +123,67 @@ const Layout = ({ onLogout, user }) => {
   const emitAlertToast = (normalized) => {
     if (!attackNotifyEnabled) return
     if (!normalized) return
-    const details = `${normalized.title}: ${normalized.message}${normalized.sourceIp ? ` (${normalized.sourceIp})` : ''}${
-      normalized.deviceName ? ` - ${normalized.deviceName}` : ''
-    }`
     const now = Date.now()
     const key = `${normalized.message}-${normalized.sourceIp ?? ''}-${normalized.deviceName ?? ''}`
     if (lastToastRef.current.key === key && now - lastToastRef.current.at < 3000) {
       return
     }
     lastToastRef.current = { key, at: now }
-    toast.error(details, {
+    toast.custom((t) => (
+      <div
+        className={`pointer-events-auto relative w-full max-w-[360px] overflow-hidden rounded-2xl border border-rose-200 bg-white shadow-2xl ring-1 ring-slate-200/80 transition-all ${
+          t.visible ? 'animate-enter' : 'animate-leave'
+        }`}
+      >
+        <div className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-rose-500 via-orange-400 to-amber-300" />
+        <div className="pl-5 pr-4 py-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 ring-1 ring-rose-200">
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+                <path d="M12 3.2 1.7 21.1c-.3.5.1 1.1.7 1.1h19.2c.6 0 1-.6.7-1.1L12 3.2z" />
+                <rect x="11" y="9" width="2" height="7" rx="1" fill="#fff" />
+                <rect x="11" y="17.5" width="2" height="2" rx="1" fill="#fff" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-500">
+                    Attack Notification
+                  </p>
+                  <h4 className="mt-1 text-sm font-semibold leading-5 text-slate-900">
+                    {normalized.title}
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toast.dismiss(t.id)}
+                  className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Dismiss alert"
+                >
+                  &times;
+                </button>
+              </div>
+              <p className="mt-2 text-sm leading-5 text-slate-700">{normalized.message}</p>
+              {(normalized.sourceIp || normalized.deviceName) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {normalized.sourceIp && (
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                      IP {normalized.sourceIp}
+                    </span>
+                  )}
+                  {normalized.deviceName && (
+                    <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                      Device {normalized.deviceName}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    ), {
       id: key,
       duration: 5000,
     })
