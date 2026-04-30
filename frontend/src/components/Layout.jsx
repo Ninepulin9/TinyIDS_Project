@@ -123,7 +123,7 @@ const Layout = ({ onLogout, user }) => {
     if (!attackNotifyEnabled) return
     const normalized = normalizeAlertEvent(incoming)
     if (!normalized) return
-    const details = `${normalized.message}${normalized.sourceIp ? ` (${normalized.sourceIp})` : ''}${
+    const details = `${normalized.title}: ${normalized.message}${normalized.sourceIp ? ` (${normalized.sourceIp})` : ''}${
       normalized.deviceName ? ` - ${normalized.deviceName}` : ''
     }`
     const now = Date.now()
@@ -132,55 +132,13 @@ const Layout = ({ onLogout, user }) => {
       return
     }
     lastToastRef.current = { key, at: now }
-    toast.custom(
-      (t) => (
-        <div
-          className={`relative w-full max-w-sm rounded-xl bg-white px-4 py-3 text-slate-900 shadow-xl ring-1 ring-slate-200 ${
-            t.visible ? 'animate-enter' : 'animate-leave'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => toast.dismiss(t.id)}
-            className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Dismiss alert"
-          >
-            &times;
-          </button>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <span className="inline-flex h-5 w-5 items-center justify-center">
-              <svg
-                viewBox="0 0 24 24"
-                className="h-5 w-5 text-amber-500"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M12 3.2 1.7 21.1c-.3.5.1 1.1.7 1.1h19.2c.6 0 1-.6.7-1.1L12 3.2z" />
-                <rect x="11" y="9" width="2" height="7" rx="1" fill="#fff" />
-                <rect x="11" y="17.5" width="2" height="2" rx="1" fill="#fff" />
-              </svg>
-            </span>
-            <span>{normalized.title}</span>
-          </div>
-          <div className="mt-1 text-xs text-slate-800">{details}</div>
-        </div>
-      ),
-      { duration: 4000 },
-    )
+    toast.error(details, {
+      id: key,
+      duration: 5000,
+    })
   }
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('tinyids_system_settings')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        if (typeof parsed?.attack_notifications === 'boolean') {
-          setAttackNotifyEnabled(parsed.attack_notifications)
-        }
-      }
-    } catch {
-      // ignore storage errors
-    }
     const loadSettings = async () => {
       try {
         const { data } = await api.get('/api/settings/system')
