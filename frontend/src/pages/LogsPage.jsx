@@ -97,7 +97,7 @@ const normalizeSocketLog = (data) => {
   return {
     id,
     device_id: data.device_id ?? payload.device_id,
-    device_name: data.device ?? payload.device_name ?? payload.device ?? 'Unknown',
+    device_name: data.device_name ?? data.device ?? payload.device_name ?? payload.device ?? 'Unknown',
     severity: normalizeSeverity(data.severity ?? payload.severity ?? payload.level),
     source_ip:
       data.source_ip ??
@@ -109,15 +109,16 @@ const normalizeSocketLog = (data) => {
       payload.destination_ip ??
       payload['destination ip'] ??
       payload['destination-ip'],
-    type: payload.type ?? payload.attack_type ?? payload.event_type ?? 'Unknown',
+    type: data.type ?? payload.type ?? payload.attack_type ?? payload.event_type ?? 'Unknown',
     alert_msg:
-      payload.alert_msg ??
       data.alert_msg ??
+      payload.alert_msg ??
       payload.message ??
       payload.summary ??
       payload.alert ??
       '',
     description:
+      data.description ??
       payload.description ??
       payload.detail ??
       payload.message ??
@@ -125,10 +126,10 @@ const normalizeSocketLog = (data) => {
       payload.alert_msg ??
       'No additional context provided.',
     timestamp:
+      data.timestamp ??
       payload.timestamp ??
       payload.time ??
       data.created_at ??
-      data.timestamp ??
       new Date().toISOString(),
     payload,
   }
@@ -587,6 +588,14 @@ const LogsPage = () => {
       socket.off('device:registered', fetchDevices)
     }
   }, [autoBlockEnabled, fetchDevices, queueAutoBlockIps, tokenIdMap])
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      fetchLatest({ silent: true })
+    }, 12000)
+    return () => window.clearInterval(intervalId)
+  }, [fetchLatest])
 
   const resolveBlockedSet = useCallback(
     (deviceId) => {

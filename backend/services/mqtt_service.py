@@ -703,10 +703,40 @@ class MQTTService:
                 self.app.logger.warning("Failed to sync blacklist to %s: %s", token_value, exc)
 
     def _emit_log(self, log: Log, device: Device) -> None:
+        payload = log.payload if isinstance(log.payload, dict) else {}
+        alert_msg = (
+            payload.get("alert_msg")
+            or payload.get("alert")
+            or payload.get("message")
+            or payload.get("summary")
+        )
+        description = (
+            payload.get("description")
+            or payload.get("detail")
+            or payload.get("message")
+            or payload.get("summary")
+            or payload.get("alert_msg")
+            or "No additional context provided."
+        )
+        event_timestamp = (
+            payload.get("timestamp")
+            or payload.get("time")
+            or payload.get("ts")
+            or payload.get("reported_at")
+            or log.created_at.isoformat()
+        )
         log_data = {
             "id": log.id,
             "device": device.name,
+            "device_id": device.id,
+            "device_name": device.name,
             "severity": log.severity,
+            "type": payload.get("type") or payload.get("attack_type") or payload.get("event_type") or "Unknown",
+            "alert_msg": alert_msg,
+            "description": description,
+            "source_ip": log.source_ip or payload.get("source_ip"),
+            "destination_ip": log.destination_ip or payload.get("destination_ip"),
+            "timestamp": event_timestamp,
             "payload": log.payload,
             "created_at": log.created_at.isoformat(),
         }
