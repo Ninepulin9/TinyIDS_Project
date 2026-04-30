@@ -86,8 +86,13 @@ const Settings = () => {
     if (systemSaving) return
     setSystemSaving(true)
     try {
-      await api.put('/api/settings/system', systemSettings)
-      toast.success('System settings saved')
+      const { data } = await api.put('/api/settings/system', systemSettings)
+      const backfilledCount = Number(data?.backfilled_auto_block_count ?? 0)
+      if (backfilledCount > 0 && autoBlockEnabled) {
+        toast.success(`System settings saved. Retroactively blocked ${backfilledCount} IPs.`)
+      } else {
+        toast.success('System settings saved')
+      }
       systemDirtyRef.current = false
       try {
         localStorage.setItem('tinyids_system_settings', JSON.stringify(systemSettings))

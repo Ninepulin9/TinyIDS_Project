@@ -10,6 +10,7 @@ from models import (
     TIMEFRAME_TO_MINUTES,
     MINUTES_TO_TIMEFRAME,
 )
+from services.mqtt_service import mqtt_service
 
 
 settings_bp = Blueprint("settings", __name__, url_prefix="/settings")
@@ -133,11 +134,17 @@ def system_settings():
         )
 
     payload = request.get_json(force=True)
+    previous_auto_block_enabled = bool(settings.auto_block_enabled)
     for attr in ["log_retention_days", "attack_notifications", "cooldown_seconds", "auto_block_enabled"]:
         if attr in payload:
             setattr(settings, attr, payload[attr])
     db.session.commit()
-    return jsonify({"status": "updated"})
+
+    backfilled_count = 0
+    if not previous_auto_block_enabled and bool(settings.auto_block_enabled):
+        backfilled_count = mqtt_service.backfill_auto_block_for_user(user_id)
+
+    return jsonify({"status": "updated", "backfilled_auto_block_count": backfilled_count})
 
 
 @settings_bp.route("/dashboard", methods=["GET", "PUT"])

@@ -926,6 +926,70 @@ class MQTTService:
             return True
         return bool(getattr(settings, "auto_block_enabled", True))
 
+    def backfill_auto_block_for_user(self, user_id: int) -> int:
+        rows = (
+            Log.query.filter(
+                Log.user_id == user_id,
+                Log.device_id.isnot(None),
+                Log.source_ip.isnot(None),
+            )
+            .order_by(Log.created_at.desc())
+            .all()
+        )
+
+        device_cache: dict[int, Device | None] = {}
+        seen_pairs: set[tuple[int, str]] = set()
+        created_blocks: list[tuple[Device, str, str | None]] = []
+
+        for row in rows:
+            payload = row.payload if isinstance(row.payload, dict) else {}
+            topic = self._coerce_str(payload.get("_mqtt_topic") or payload.get("topic"))
+            if (topic or "").lower() != "esp/alert":
+                continue
+
+            ip_value = self._coerce_str(row.source_ip)
+            if not ip_value or row.device_id is None:
+                continue
+
+            pair_key = (int(row.device_id), ip_value)
+            if pair_key in seen_pairs:
+                continue
+            seen_pairs.add(pair_key)
+
+            device = device_cache.get(row.device_id)
+            if row.device_id not in device_cache:
+                device = Device.query.filter(
+                    Device.id == row.device_id,
+                    Device.user_id == user_id,
+                ).first()
+                device_cache[row.device_id] = device
+            if not device:
+                continue
+
+            created, reason = self._auto_block_ip(user_id, device.id, ip_value, payload)
+            if created:
+                created_blocks.append((device, ip_value, reason))
+
+        if not created_blocks:
+            return 0
+
+        db.session.commit()
+
+        for device, ip_value, reason in created_blocks:
+            try:
+                self._queue_block_for_device(device, ip_value)
+            except Exception as exc:  # noqa: BLE001
+                if self.app:
+                    self.app.logger.warning(
+                        "Failed to sync retroactive auto-block %s for device %s: %s",
+                        ip_value,
+                        device.id,
+                        exc,
+                    )
+            self._emit_blacklist_update("blocked", device.id, ip_value, reason)
+
+        return len(created_blocks)
+
     def _sync_blocked_ip_to_device(self, device: Device, ip_address: str) -> None:
         if not self.is_connected():
             return

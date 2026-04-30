@@ -46,6 +46,70 @@ const routeSubtitles = {
   '/rules': 'Rule Configuration',
 }
 
+const normalizeAlertEvent = (incoming) => {
+  if (!incoming || typeof incoming !== 'object') return null
+
+  const payload = incoming.payload && typeof incoming.payload === 'object' ? incoming.payload : {}
+  const topic = String(
+    payload._mqtt_topic ??
+      incoming._mqtt_topic ??
+      payload.topic ??
+      incoming.topic ??
+      '',
+  ).toLowerCase()
+  const type = String(payload.type ?? incoming.type ?? '').trim()
+  const message = String(
+    payload.alert_msg ??
+      incoming.alert_msg ??
+      payload.message ??
+      incoming.message ??
+      payload.summary ??
+      incoming.summary ??
+      '',
+  ).trim()
+  const sourceIp = String(
+    incoming.source_ip ??
+      payload.source_ip ??
+      payload['source ip'] ??
+      payload['source-ip'] ??
+      payload.alert_ip ??
+      incoming.alert_ip ??
+      payload.ip ??
+      incoming.ip ??
+      '',
+  ).trim()
+  const deviceName = String(
+    incoming.device_name ??
+      incoming.device ??
+      payload.device_name ??
+      payload.device ??
+      '',
+  ).trim()
+  const severity = String(incoming.severity ?? payload.severity ?? '').trim().toLowerCase()
+  const isSettingsEvent = topic.includes('esp/setting') || type.toLowerCase() === 'esp settings'
+  const isAliveEvent = topic.includes('esp/alive')
+  const looksLikeAlert =
+    topic.includes('esp/alert') ||
+    type.toLowerCase().includes('alert') ||
+    Boolean(payload.alert_msg ?? incoming.alert_msg) ||
+    (Boolean(message) && ['high', 'critical', 'severe', 'error'].includes(severity))
+
+  if (!looksLikeAlert || isSettingsEvent || isAliveEvent) return null
+
+  let title = type || 'Attack Alert'
+  if (!title.toLowerCase().includes('alert')) {
+    title = `${title} Alert`
+  }
+
+  return {
+    id: incoming.id ?? payload.id ?? null,
+    title,
+    message: message || 'Intrusion detected',
+    sourceIp,
+    deviceName,
+  }
+}
+
 const Layout = ({ onLogout, user }) => {
   const location = useLocation()
   const subtitle = routeSubtitles[location.pathname] ?? 'TinyIDS Platform'
@@ -57,56 +121,13 @@ const Layout = ({ onLogout, user }) => {
 
   const emitAlertToast = (incoming) => {
     if (!attackNotifyEnabled) return
-    if (!incoming || typeof incoming !== 'object') return
-
-    const payload =
-      incoming?.payload && typeof incoming.payload === 'object'
-        ? incoming.payload
-        : incoming
-
-    const topic = String(
-      payload?._mqtt_topic ??
-        incoming?.payload?._mqtt_topic ??
-        incoming?._mqtt_topic ??
-        payload?.topic ??
-        incoming?.topic ??
-        '',
-    ).toLowerCase()
-
-    if (topic && !topic.includes('esp/alert')) return
-    const typeLabel = String(payload.type ?? incoming?.type ?? '').toLowerCase()
-    if (typeLabel === 'esp settings') return
-    if (!typeLabel && !payload.alert_msg && !payload.message && !incoming?.alert_msg) return
-
-    const message =
-      payload.alert_msg ||
-      incoming?.alert_msg ||
-      payload.message ||
-      incoming?.message ||
-      payload.type ||
-      incoming?.type ||
-      'Intrusion detected'
-    const sourceIp =
-      payload.source_ip ||
-      incoming?.source_ip ||
-      payload.alert_ip ||
-      incoming?.alert_ip ||
-      payload.ip ||
-      incoming?.ip
-    const deviceName =
-      payload.device_name ||
-      incoming?.device_name ||
-      payload.device ||
-      incoming?.device
-    let title = payload.type || incoming?.type || 'Alert'
-    if (!String(title).toLowerCase().includes('alert')) {
-      title = `${title} Alert`
-    }
-    const details = `${message}${sourceIp ? ` (${sourceIp})` : ''}${deviceName ? ` - ${deviceName}` : ''}`
-    const toastTitle = title
-    const toastDetails = details
+    const normalized = normalizeAlertEvent(incoming)
+    if (!normalized) return
+    const details = `${normalized.message}${normalized.sourceIp ? ` (${normalized.sourceIp})` : ''}${
+      normalized.deviceName ? ` - ${normalized.deviceName}` : ''
+    }`
     const now = Date.now()
-    const key = `${message}-${sourceIp ?? ''}-${deviceName ?? ''}`
+    const key = `${normalized.message}-${normalized.sourceIp ?? ''}-${normalized.deviceName ?? ''}`
     if (lastToastRef.current.key === key && now - lastToastRef.current.at < 3000) {
       return
     }
@@ -124,7 +145,7 @@ const Layout = ({ onLogout, user }) => {
             className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
             aria-label="Dismiss alert"
           >
-            ×
+            &times;
           </button>
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             <span className="inline-flex h-5 w-5 items-center justify-center">
@@ -139,9 +160,9 @@ const Layout = ({ onLogout, user }) => {
                 <rect x="11" y="17.5" width="2" height="2" rx="1" fill="#fff" />
               </svg>
             </span>
-            <span>{toastTitle}</span>
+            <span>{normalized.title}</span>
           </div>
-          <div className="mt-1 text-xs text-slate-800">{toastDetails}</div>
+          <div className="mt-1 text-xs text-slate-800">{details}</div>
         </div>
       ),
       { duration: 4000 },
@@ -187,9 +208,10 @@ const Layout = ({ onLogout, user }) => {
   useEffect(() => {
     const socket = getSocket()
     const handleLogNew = (payload) => {
-      const id = payload?.id ?? payload?.payload?.id
-      if (id != null && lastAlertIdRef.current === id) return
-      if (id != null) lastAlertIdRef.current = id
+      const normalized = normalizeAlertEvent(payload)
+      if (!normalized) return
+      if (normalized.id != null && lastAlertIdRef.current === normalized.id) return
+      if (normalized.id != null) lastAlertIdRef.current = normalized.id
       emitAlertToast(payload)
     }
     socket.on('log:new', handleLogNew)
