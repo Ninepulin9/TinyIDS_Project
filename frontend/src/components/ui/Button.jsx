@@ -7,14 +7,14 @@ const variantClasses = {
 }
 
 const sizeClasses = {
-  sm: 'h-9 px-3 text-sm',
-  md: 'h-11 px-4 text-sm',
-  lg: 'h-12 px-5 text-base',
+  sm: 'h-10 px-4 text-sm',
+  md: 'h-12 px-5 text-base',
+  lg: 'h-14 px-6 text-lg',
 }
 
 const Button = ({ variant = 'primary', size = 'md', className = '', type = 'button', disabled, children, ...props }) => {
   const baseClasses =
-    'inline-flex items-center justify-center rounded-lg font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60'
+    'inline-flex items-center justify-center rounded-xl font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60'
 
   const variantClass = variantClasses[variant] ?? variantClasses.primary
   const sizeClass = sizeClasses[size] ?? sizeClasses.md

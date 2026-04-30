@@ -287,28 +287,28 @@ const Layout = ({ onLogout, user }) => {
 
   return (
   <div className="flex min-h-screen bg-slate-100 text-slate-900">
-    <aside className="hidden h-screen w-72 flex-shrink-0 flex-col overflow-y-auto bg-white shadow-xl lg:sticky lg:top-0 lg:flex">
-      <div className="flex items-center justify-center bg-gradient-to-br from-sky-500 via-blue-500 to-blue-600 px-6 py-6">
-        <Link to="/dashboard" className="text-2xl font-semibold tracking-wide text-white">
+    <aside className="hidden h-screen w-80 flex-shrink-0 flex-col overflow-y-auto bg-white shadow-xl lg:sticky lg:top-0 lg:flex xl:w-[21rem]">
+      <div className="flex items-center justify-center bg-gradient-to-br from-sky-500 via-blue-500 to-blue-600 px-7 py-7">
+        <Link to="/dashboard" className="text-[2rem] font-semibold tracking-wide text-white">
           TinyIDS
         </Link>
       </div>
-      <div className="flex flex-1 flex-col gap-8 px-6 py-6">
+      <div className="flex flex-1 flex-col gap-10 px-7 py-7">
         <div className="text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 text-slate-500 shadow-inner">
-            <UserCircle2 className="h-12 w-12" />
+          <div className="mx-auto flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full bg-slate-100 text-slate-500 shadow-inner">
+            <UserCircle2 className="h-14 w-14" />
           </div>
-          <p className="mt-3 text-sm font-semibold text-slate-800">{user?.username ?? 'User Name'}</p>
-          <p className="text-xs text-slate-400">{subtitle}</p>
+          <p className="mt-4 text-base font-semibold text-slate-800">{user?.username ?? 'User Name'}</p>
+          <p className="mt-1 text-sm text-slate-400">{subtitle}</p>
         </div>
 
-        <nav className="space-y-7">
+        <nav className="space-y-8">
           {sections.map((section) => (
             <div key={section.title}>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-sky-500">
+              <p className="mb-3 text-[0.78rem] font-semibold uppercase tracking-[0.16em] text-sky-500">
                 {section.title}
               </p>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
 	                {section.items.map(({ to, label, icon: Icon, disabled }) =>
 	                  to && !disabled ? (
 	                    <NavLink
@@ -321,37 +321,37 @@ const Layout = ({ onLogout, user }) => {
 	                        }
 	                      }}
 	                      className={({ isActive }) =>
-	                        `flex items-center justify-between rounded-xl px-3 py-2 text-sm font-medium transition ${
+	                        `flex items-center justify-between rounded-2xl px-4 py-2.5 text-[0.95rem] font-medium transition ${
 	                          isActive
                             ? 'bg-sky-500/10 text-sky-600 ring-1 ring-inset ring-sky-400'
                             : 'text-slate-500 hover:bg-slate-100'
                         }`
                       }
                     >
-                      <span className="flex items-center gap-3">
+                      <span className="flex items-center gap-3.5">
                         {typeof Icon === 'string' ? (
-                          <img src={Icon} alt="" className="h-4 w-4 rounded-full object-cover" />
+                          <img src={Icon} alt="" className="h-[1.125rem] w-[1.125rem] rounded-full object-cover" />
                         ) : (
-                          <Icon className="h-4 w-4" />
+                          <Icon className="h-[1.125rem] w-[1.125rem]" />
                         )}
                         {label}
                       </span>
-                      <ChevronRight className="h-4 w-4 opacity-60" />
+                      <ChevronRight className="h-[1.125rem] w-[1.125rem] opacity-60" />
                     </NavLink>
                   ) : (
                     <div
                       key={label}
-                      className="flex cursor-not-allowed items-center justify-between rounded-xl px-3 py-2 text-sm font-medium text-slate-300"
+                      className="flex cursor-not-allowed items-center justify-between rounded-2xl px-4 py-2.5 text-[0.95rem] font-medium text-slate-300"
                     >
-                      <span className="flex items-center gap-3">
+                      <span className="flex items-center gap-3.5">
                         {typeof Icon === 'string' ? (
-                          <img src={Icon} alt="" className="h-4 w-4 rounded-full object-cover" />
+                          <img src={Icon} alt="" className="h-[1.125rem] w-[1.125rem] rounded-full object-cover" />
                         ) : (
-                          <Icon className="h-4 w-4" />
+                          <Icon className="h-[1.125rem] w-[1.125rem]" />
                         )}
                         {label}
                       </span>
-                      <ChevronRight className="h-4 w-4 opacity-40" />
+                      <ChevronRight className="h-[1.125rem] w-[1.125rem] opacity-40" />
                     </div>
                   )
                 )}
@@ -360,17 +360,17 @@ const Layout = ({ onLogout, user }) => {
           ))}
         </nav>
       </div>
-      <div className="sticky bottom-0 z-10 mt-auto border-t border-slate-100 bg-white px-6 py-5">
+      <div className="sticky bottom-0 z-10 mt-auto border-t border-slate-100 bg-white px-7 py-6">
         <button
           type="button"
           onClick={() => setShowConfirm(true)}
-          className="w-full rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-600"
+          className="w-full rounded-2xl bg-rose-500 px-4 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-rose-600"
         >
           Sign out
         </button>
       </div>
 	    </aside>
-	    <main className="flex-1 px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
+	    <main className="flex-1 px-5 py-7 sm:px-10 lg:px-14 lg:py-11 xl:px-16">
 	      <Outlet key={`${location.pathname}:${routeRefreshKey}`} />
 	    </main>
 
