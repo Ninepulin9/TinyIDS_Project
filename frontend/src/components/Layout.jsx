@@ -118,10 +118,10 @@ const Layout = ({ onLogout, user }) => {
   const [routeRefreshKey, setRouteRefreshKey] = useState(0)
   const lastToastRef = useRef({ key: '', at: 0 })
   const lastAlertIdRef = useRef(null)
+  const alertsSeededRef = useRef(false)
 
-  const emitAlertToast = (incoming) => {
+  const emitAlertToast = (normalized) => {
     if (!attackNotifyEnabled) return
-    const normalized = normalizeAlertEvent(incoming)
     if (!normalized) return
     const details = `${normalized.title}: ${normalized.message}${normalized.sourceIp ? ` (${normalized.sourceIp})` : ''}${
       normalized.deviceName ? ` - ${normalized.deviceName}` : ''
@@ -168,13 +168,69 @@ const Layout = ({ onLogout, user }) => {
     const handleLogNew = (payload) => {
       const normalized = normalizeAlertEvent(payload)
       if (!normalized) return
-      if (normalized.id != null && lastAlertIdRef.current === normalized.id) return
-      if (normalized.id != null) lastAlertIdRef.current = normalized.id
-      emitAlertToast(payload)
+      const numericId = Number(normalized.id)
+      if (Number.isFinite(numericId)) {
+        if (lastAlertIdRef.current != null && numericId <= lastAlertIdRef.current) return
+        lastAlertIdRef.current = Math.max(lastAlertIdRef.current ?? numericId, numericId)
+      }
+      alertsSeededRef.current = true
+      emitAlertToast(normalized)
     }
     socket.on('log:new', handleLogNew)
     return () => {
       socket.off('log:new', handleLogNew)
+    }
+  }, [attackNotifyEnabled])
+
+  useEffect(() => {
+    if (!attackNotifyEnabled) return undefined
+
+    let cancelled = false
+
+    const syncLatestAlerts = async (seedOnly = false) => {
+      try {
+        const { data } = await api.get('/api/logs?limit=10')
+        if (cancelled) return
+        const alerts = (Array.isArray(data) ? data : [])
+          .map((item) => normalizeAlertEvent(item))
+          .filter(Boolean)
+          .map((item) => ({ ...item, numericId: Number(item.id) }))
+          .filter((item) => Number.isFinite(item.numericId))
+          .sort((left, right) => left.numericId - right.numericId)
+
+        if (!alerts.length) {
+          if (!alertsSeededRef.current) {
+            alertsSeededRef.current = true
+          }
+          return
+        }
+
+        if (seedOnly || !alertsSeededRef.current || lastAlertIdRef.current == null) {
+          lastAlertIdRef.current = alerts[alerts.length - 1].numericId
+          alertsSeededRef.current = true
+          return
+        }
+
+        const unseen = alerts.filter((item) => item.numericId > lastAlertIdRef.current)
+        if (!unseen.length) return
+
+        for (const alert of unseen) {
+          emitAlertToast(alert)
+        }
+        lastAlertIdRef.current = unseen[unseen.length - 1].numericId
+      } catch {
+        // ignore polling errors; socket remains primary
+      }
+    }
+
+    syncLatestAlerts(true)
+    const intervalId = window.setInterval(() => {
+      syncLatestAlerts(false)
+    }, 10000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
     }
   }, [attackNotifyEnabled])
 
