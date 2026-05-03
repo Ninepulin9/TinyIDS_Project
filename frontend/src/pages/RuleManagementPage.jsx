@@ -31,9 +31,9 @@ const defaultRuleState = {
 const ruleSections = [
   {
     id: 'rate_limit',
-    title: 'Rate Limiting',
+    title: 'Rate Limit Detection',
     subtitle: 'CFG_RATE_LIMIT_COUNT / CFG_RATE_LIMIT_SECONDS',
-    description: 'Limit how many events are allowed in a time window to avoid flooding.',
+    description: 'Set how many requests are allowed within a short time window before traffic is treated as flooding.',
     fields: [
       { key: 'cfg_rate_limit_count', label: 'Requests per Window', helper: 'CFG_RATE_LIMIT_COUNT', type: 'number', required: true },
       { key: 'cfg_rate_limit_seconds', label: 'Window (seconds)', helper: 'CFG_RATE_LIMIT_SECONDS', type: 'number', required: true },
@@ -41,20 +41,27 @@ const ruleSections = [
   },
   {
     id: 'oversize_http',
-    title: 'Oversized & HTTP Constraints',
-    subtitle: 'Payload and URL safety',
-    description: 'Protect against oversized payloads and long URLs; tune RSSI threshold.',
+    title: 'Oversized Payload',
+    subtitle: 'CFG_OVERSIZED_THRESHOLD',
+    description: 'Set the largest payload size allowed before the request is treated as suspicious or oversized.',
     fields: [
       { key: 'cfg_oversized_threshold', label: 'Oversized Threshold (bytes)', helper: 'CFG_OVERSIZED_THRESHOLD', type: 'number' },
+    ],
+  },
+  {
+    id: 'http_url_range',
+    title: 'HTTP URL Range',
+    subtitle: 'CFG_HTTP_URL_MAX_LEN',
+    description: 'Limit the maximum URL length so overly long or malicious request paths can be rejected earlier.',
+    fields: [
       { key: 'cfg_http_url_max_len', label: 'HTTP URL Max Length', helper: 'CFG_HTTP_URL_MAX_LEN', type: 'number' },
-      { key: 'cfg_rssi_diff_threshold', label: 'RSSI Diff Threshold', helper: 'CFG_RSSI_DIFF_THRESHOLD', type: 'number' },
     ],
   },
   {
     id: 'syn',
-    title: 'SYN Flood Protection',
-    subtitle: 'SYN thresholds and timeout',
-    description: 'Detect and react to SYN flood attempts.',
+    title: 'SYN Flood Detection',
+    subtitle: 'CFG_SYN_FLOOD_THRESHOLD / CFG_SYN_FLOOD_SECONDS / CFG_SYN_TIMEOUT',
+    description: 'Detect half-open SYN floods by counting fast requests and dropping stale connections sooner.',
     fields: [
       { key: 'cfg_syn_flood_threshold', label: 'SYN Flood Threshold', helper: 'CFG_SYN_FLOOD_THRESHOLD', type: 'number' },
       { key: 'cfg_syn_flood_seconds', label: 'SYN Flood Window (seconds)', helper: 'CFG_SYN_FLOOD_SECONDS', type: 'number' },
@@ -64,8 +71,8 @@ const ruleSections = [
   {
     id: 'http_bf',
     title: 'HTTP Brute Force',
-    subtitle: 'Threshold, window, block time',
-    description: 'Set limits for HTTP brute-force detection and block duration.',
+    subtitle: 'CFG_HTTP_BF_THRESHOLD / CFG_HTTP_BF_WINDOW / CFG_HTTP_BF_BLOCK_TIME',
+    description: 'Control failed login thresholds, the counting window, and how long the source IP stays blocked.',
     fields: [
       { key: 'cfg_http_bf_threshold', label: 'HTTP BF Threshold', helper: 'CFG_HTTP_BF_THRESHOLD', type: 'number' },
       { key: 'cfg_http_bf_window', label: 'HTTP BF Window (seconds)', helper: 'CFG_HTTP_BF_WINDOW', type: 'number' },
@@ -74,17 +81,23 @@ const ruleSections = [
   },
   {
     id: 'deauth',
-    title: 'Deauth Cooldown',
-    subtitle: 'Cooldown after detection',
-    description: 'Delay before accepting new auth attempts after deauth events.',
+    title: 'De-authentication Detection',
+    subtitle: 'CFG_DEAUTH_COOLDOWN_MS',
+    description: 'Delay repeated de-authentication alerts so the device is not overwhelmed by high packet bursts.',
     fields: [{ key: 'cfg_deauth_cooldown_ms', label: 'Deauth Cooldown (ms)', helper: 'CFG_DEAUTH_COOLDOWN_MS', type: 'number', fullWidth: true }],
   },
   {
     id: 'trust',
     title: 'Trusted Channels & IP/MAC Map',
-    subtitle: 'g_trusted_channel / Map_IP_Mac_address',
+    subtitle: 'CFG_RSSI_DIFF_THRESHOLD / g_trusted_channel / Map_IP_Mac_address',
     description: 'Comma separated lists of Wi‑Fi channels and MAC addresses that are allowed.',
     fields: [
+      {
+        key: 'cfg_rssi_diff_threshold',
+        label: 'RSSI Diff Threshold',
+        helper: 'CFG_RSSI_DIFF_THRESHOLD',
+        type: 'number',
+      },
       {
         key: 'g_trusted_channel',
         label: 'Trusted Channels',
@@ -104,10 +117,9 @@ const ruleSections = [
     },
   {
     id: 'whitelist',
-    title: 'MQTT Whitelist & Blocked IPs',
-    subtitle: 'g_mqtt_whitelist / blocked_ips',
-    description: 'Topics allowed to publish/subscribe and IPs blocked by IDS.',
-    gridCols: 'sm:grid-cols-2 lg:grid-cols-2',
+    title: 'Unexpected Topic MQTT',
+    subtitle: 'g_mqtt_whitelist',
+    description: 'Allow only approved MQTT topics so unexpected topics can be treated as unauthorized traffic.',
     fields: [
       {
         key: 'g_mqtt_whitelist',
@@ -115,21 +127,31 @@ const ruleSections = [
         helper: 'g_mqtt_whitelist (comma-separated)',
         placeholder: 'test/data, device/status',
         type: 'text',
+        fullWidth: true,
       },
+    ],
+  },
+  {
+    id: 'blocked_ips',
+    title: 'Network Block IPs',
+    subtitle: 'blocked_ips',
+    description: 'Blacklist IPs that the device should reject immediately when those hosts try to access the system.',
+    fields: [
       {
         key: 'blocked_ips',
         label: 'Blocked IPs',
         helper: 'blocked_ips (comma-separated)',
         placeholder: '192.168.1.10, 192.168.1.11',
         type: 'text',
+        fullWidth: true,
       },
     ],
   },
   {
     id: 'xss',
-    title: 'XSS Patterns',
+    title: 'Cross-Site Scripting',
     subtitle: 'xss_patterns',
-    description: 'Comma separated list of XSS patterns to detect/block.',
+    description: 'Keywords and script patterns that should be dropped immediately when suspicious HTTP payloads are inspected.',
     fields: [
       {
         key: 'xss_patterns',
