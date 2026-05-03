@@ -88,8 +88,8 @@ const ruleSections = [
   },
   {
     id: 'trust',
-    title: 'Trusted Channels & IP/MAC Map',
-    subtitle: 'CFG_RSSI_DIFF_THRESHOLD / g_trusted_channel / Map_IP_Mac_address',
+    title: 'Evil Twin & ARP: Trusted Channels / IP-MAC Map',
+    subtitle: 'Evil Twin / ARP Spoofing • CFG_RSSI_DIFF_THRESHOLD / g_trusted_channel / Map_IP_Mac_address',
     description: 'Comma separated lists of Wi‑Fi channels and MAC addresses that are allowed.',
     fields: [
       {
