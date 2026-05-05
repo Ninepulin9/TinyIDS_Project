@@ -30,6 +30,9 @@ class MQTTService:
         self.settings_poll_interval = 0
         self.device_prune_hours = 24
         self.device_prune_interval = 3600
+        self.log_retention_cleanup_interval = 3600
+        self.log_retention_cleanup_thread_started = False
+        self.default_log_retention_days = 30
         self.allow_reregister = True
         self.reregister_once: set[str] = set()
         self.pending_registrations: dict[str, dict] = {}
@@ -49,6 +52,13 @@ class MQTTService:
 
     def init_app(self, app) -> None:
         self.app = app
+        self.log_retention_cleanup_interval = int(
+            app.config.get("LOG_RETENTION_CLEANUP_INTERVAL", 3600) or 3600
+        )
+        self.default_log_retention_days = int(
+            getattr(SystemSettings.__table__.c.log_retention_days.default, "arg", 30) or 30
+        )
+        self._start_log_retention_cleanup()
         broker = app.config.get("MQTT_BROKER_URL")
         if not broker:
             app.logger.warning("MQTT broker URL missing; skipping MQTT startup")
@@ -654,6 +664,81 @@ class MQTTService:
                 time.sleep(self.device_prune_interval)
 
         threading.Thread(target=_loop, daemon=True).start()
+
+    def _start_log_retention_cleanup(self) -> None:
+        if self.log_retention_cleanup_thread_started or self.log_retention_cleanup_interval <= 0:
+            return
+        self.log_retention_cleanup_thread_started = True
+
+        def _loop():
+            while True:
+                try:
+                    with self.app.app_context():
+                        deleted_count = self.cleanup_expired_logs()
+                        if deleted_count and self.app:
+                            self.app.logger.info(
+                                "Log retention cleanup removed %s expired logs",
+                                deleted_count,
+                            )
+                except Exception as exc:  # noqa: BLE001
+                    if self.app:
+                        self.app.logger.exception("Log retention cleanup error: %s", exc)
+                time.sleep(self.log_retention_cleanup_interval)
+
+        threading.Thread(target=_loop, daemon=True).start()
+
+    def _normalize_retention_days(self, value) -> int:
+        try:
+            days = int(value)
+        except (TypeError, ValueError):
+            days = self.default_log_retention_days
+        if days <= 0:
+            days = self.default_log_retention_days
+        return days
+
+    def cleanup_expired_logs(self, user_id: int | None = None) -> int:
+        now = datetime.utcnow()
+        settings_query = SystemSettings.query.with_entities(
+            SystemSettings.user_id,
+            SystemSettings.log_retention_days,
+        )
+        if user_id is not None:
+            settings_query = settings_query.filter(SystemSettings.user_id == user_id)
+        retention_by_user = {
+            row_user_id: self._normalize_retention_days(retention_days)
+            for row_user_id, retention_days in settings_query.all()
+        }
+
+        log_users_query = Log.query.with_entities(Log.user_id).distinct()
+        if user_id is not None:
+            log_users_query = log_users_query.filter(Log.user_id == user_id)
+        target_user_ids = {
+            row_user_id for (row_user_id,) in log_users_query.all() if row_user_id is not None
+        }
+        target_user_ids.update(retention_by_user.keys())
+
+        deleted_total = 0
+        try:
+            for target_user_id in target_user_ids:
+                retention_days = retention_by_user.get(
+                    target_user_id,
+                    self.default_log_retention_days,
+                )
+                cutoff = now - timedelta(days=retention_days)
+                deleted_total += (
+                    Log.query.filter(Log.user_id == target_user_id)
+                    .filter(Log.created_at < cutoff)
+                    .delete(synchronize_session=False)
+                )
+            if deleted_total:
+                db.session.commit()
+            else:
+                db.session.rollback()
+        except Exception:
+            db.session.rollback()
+            raise
+
+        return deleted_total
 
     def _get_blacklist_ips(self, user_id: int, device_id: int | None = None) -> list[str]:
         query = Blacklist.query.filter(Blacklist.user_id == user_id)

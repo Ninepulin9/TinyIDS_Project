@@ -135,16 +135,26 @@ def system_settings():
 
     payload = request.get_json(force=True)
     previous_auto_block_enabled = bool(settings.auto_block_enabled)
+    retention_updated = "log_retention_days" in payload
     for attr in ["log_retention_days", "attack_notifications", "cooldown_seconds", "auto_block_enabled"]:
         if attr in payload:
             setattr(settings, attr, payload[attr])
     db.session.commit()
 
     backfilled_count = 0
+    deleted_logs_count = 0
+    if retention_updated:
+        deleted_logs_count = mqtt_service.cleanup_expired_logs(user_id=user_id)
     if not previous_auto_block_enabled and bool(settings.auto_block_enabled):
         backfilled_count = mqtt_service.backfill_auto_block_for_user(user_id)
 
-    return jsonify({"status": "updated", "backfilled_auto_block_count": backfilled_count})
+    return jsonify(
+        {
+            "status": "updated",
+            "backfilled_auto_block_count": backfilled_count,
+            "deleted_logs_count": deleted_logs_count,
+        }
+    )
 
 
 @settings_bp.route("/dashboard", methods=["GET", "PUT"])

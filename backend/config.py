@@ -29,6 +29,7 @@ class Settings:
     MQTT_SETTINGS_POLL_INTERVAL = int(os.getenv("MQTT_SETTINGS_POLL_INTERVAL", 0))
     MQTT_ALLOW_REREGISTER = os.getenv("MQTT_ALLOW_REREGISTER", "false").lower() == "true"
     MQTT_AUTO_DISCOVERY = os.getenv("MQTT_AUTO_DISCOVERY", "false").lower() == "true"
+    LOG_RETENTION_CLEANUP_INTERVAL = int(os.getenv("LOG_RETENTION_CLEANUP_INTERVAL", 3600))
 
 
 settings = Settings()
