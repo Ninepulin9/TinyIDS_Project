@@ -91,9 +91,43 @@ def _looks_like_attack_log(payload, severity) -> bool:
         or ""
     ).lower()
     severity_value = str(severity or payload.get("severity") or "").lower()
+    alert_msg = str(
+        payload.get("alert_msg")
+        or payload.get("alert")
+        or payload.get("message")
+        or payload.get("summary")
+        or ""
+    ).strip()
+    description = str(
+        payload.get("description")
+        or payload.get("detail")
+        or payload.get("message")
+        or payload.get("summary")
+        or ""
+    ).lower()
+    attack_keywords = (
+        "rate limit",
+        "flood",
+        "brute force",
+        "brute-force",
+        "oversized",
+        "arp",
+        "spoof",
+        "evil twin",
+        "deauth",
+        "authentication",
+        "xss",
+        "mqtt",
+        "payload",
+        "violation",
+    )
     return (
         topic == "esp/alert"
+        or topic.startswith("esp/alert")
         or "alert" in event_type
+        or bool(alert_msg)
+        or any(keyword in event_type for keyword in attack_keywords)
+        or any(keyword in description for keyword in attack_keywords)
         or severity_value in {"high", "critical", "severe", "error"}
     )
 

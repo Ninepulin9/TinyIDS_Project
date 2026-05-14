@@ -199,8 +199,10 @@ const Dashboard = () => {
   const showTrendChart = widgetVisibility.detection_trend_pct !== false
   const showSensorCard = widgetVisibility.sensor_health_card !== false
   const attackTimingRows = Array.isArray(attackTiming?.rows) ? attackTiming.rows : []
+  const attackTimingTotalAlerts = Number(attackTiming?.totalAlerts ?? 0) || 0
   const peakWindow = attackTiming?.peakWindow ?? null
   const attackTimingMax = Number(attackTiming?.maxCount ?? 0) || 0
+  const hasAttackTimingData = attackTimingRows.length > 0 && attackTimingTotalAlerts > 0
 
   useEffect(() => {
     if (!peakWindow) {
@@ -464,7 +466,7 @@ const Dashboard = () => {
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">{formatNumber(attackTiming?.totalAlerts ?? 0)}</span> alerts mapped across the last {windowDays} days
+                <span className="font-semibold text-slate-900">{formatNumber(attackTimingTotalAlerts)}</span> alerts mapped across the last {windowDays} days
               </div>
               {peakWindow && (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -475,7 +477,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {selectedAttackWindow && (
+          {hasAttackTimingData && selectedAttackWindow && (
             <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
               <span className="font-semibold">Focused window:</span>{' '}
               {selectedAttackWindow.fullLabel} at {selectedAttackWindow.hourLabel} with{' '}
@@ -483,24 +485,27 @@ const Dashboard = () => {
             </div>
           )}
 
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-            <span className="font-semibold uppercase tracking-wide text-slate-400">Legend</span>
-            <div className="flex items-center gap-2">
-              <span className="h-3.5 w-6 rounded border border-slate-200 bg-slate-50" />
-              Low
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-3.5 w-6 rounded border border-sky-300 bg-sky-300/60" />
-              Medium
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="h-3.5 w-6 rounded border border-sky-700 bg-sky-700" />
-              High
-            </div>
-          </div>
+          {hasAttackTimingData ? (
+            <>
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <span className="font-semibold uppercase tracking-wide text-slate-400">Legend</span>
+                <div className="flex items-center gap-2">
+                  <span className="h-3.5 w-6 rounded border border-slate-200 bg-slate-50" />
+                  Low
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-3.5 w-6 rounded border border-sky-300 bg-sky-300/60" />
+                  Medium
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-3.5 w-6 rounded border border-sky-700 bg-sky-700" />
+                  High
+                </div>
+              </div>
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="min-w-[980px] border-separate border-spacing-1">
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[980px] border-separate border-spacing-1">
               <thead>
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -522,7 +527,7 @@ const Dashboard = () => {
               <tbody>
                 {attackTimingRows.map((row) => (
                   <tr key={row.date}>
-                    <td className="whitespace-nowrap px-3 py-2 text-sm font-semibold text-slate-700">
+                    <td className="whitespace-nowrap rounded-l-xl bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm">
                       <div className="flex flex-col">
                         <span>{row.label}</span>
                         <span className="text-xs font-medium text-slate-400">
@@ -558,14 +563,27 @@ const Dashboard = () => {
                         </td>
                       )
                     })}
-                    <td className="px-3 py-2 text-right text-sm font-semibold text-slate-700">
+                    <td className="rounded-r-xl bg-white px-3 py-2 text-right text-sm font-semibold text-slate-700 shadow-sm">
                       {formatNumber(row.total ?? 0)}
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <h3 className="mt-4 text-base font-semibold text-slate-800">No attack activity mapped yet</h3>
+              <p className="mt-2 text-sm text-slate-500">
+                No attack alerts were grouped into the selected {windowDays}-day window yet.
+              </p>
+            </div>
+          )}
         </section>
 
         {loading && (
