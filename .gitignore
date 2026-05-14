@@ -1,2 +1,4 @@
 node_modules
 mosquitto/certs/
+__pycache__/
+*.pyc
