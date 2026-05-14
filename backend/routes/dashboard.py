@@ -1,5 +1,6 @@
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as dt_time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -11,6 +12,8 @@ from models import Blacklist, Device, Log
 
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
+
+DISPLAY_TIMEZONE = ZoneInfo("Asia/Bangkok")
 
 
 def _resolve_user_id(default: int = 1) -> int:
@@ -75,6 +78,93 @@ def _build_trend_data(base_query, days: int):
         }
         for day in window
     ]
+
+
+def _looks_like_attack_log(payload, severity) -> bool:
+    if not isinstance(payload, dict):
+        payload = {}
+    topic = str(payload.get("_mqtt_topic") or payload.get("topic") or "").lower()
+    event_type = str(
+        payload.get("type")
+        or payload.get("attack_type")
+        or payload.get("event_type")
+        or ""
+    ).lower()
+    severity_value = str(severity or payload.get("severity") or "").lower()
+    return (
+        topic == "esp/alert"
+        or "alert" in event_type
+        or severity_value in {"high", "critical", "severe", "error"}
+    )
+
+
+def _build_attack_timing_data(base_query, days: int):
+    days = max(1, min(int(days or 7), 90))
+    today_local = datetime.now(DISPLAY_TIMEZONE).date()
+    window = [today_local - timedelta(days=idx) for idx in range(days - 1, -1, -1)]
+    window_set = set(window)
+    window_start_local = datetime.combine(window[0], dt_time.min, tzinfo=DISPLAY_TIMEZONE)
+    window_start_utc = window_start_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+    rows = (
+        base_query.with_entities(Log.created_at, Log.payload, Log.severity)
+        .filter(Log.created_at >= window_start_utc)
+        .all()
+    )
+
+    counts_by_day_hour = defaultdict(lambda: [0] * 24)
+    totals_by_day = defaultdict(int)
+    max_count = 0
+    peak_window = None
+
+    for created_at, payload, severity in rows:
+        if not created_at:
+            continue
+        if not _looks_like_attack_log(payload, severity):
+            continue
+        utc_dt = created_at.replace(tzinfo=timezone.utc) if created_at.tzinfo is None else created_at.astimezone(timezone.utc)
+        local_dt = utc_dt.astimezone(DISPLAY_TIMEZONE)
+        day_key = local_dt.date()
+        if day_key not in window_set:
+            continue
+        hour = int(local_dt.hour)
+        counts_by_day_hour[day_key][hour] += 1
+        totals_by_day[day_key] += 1
+        count = counts_by_day_hour[day_key][hour]
+        if count > max_count:
+            max_count = count
+            peak_window = {
+                "date": day_key.isoformat(),
+                "label": day_key.strftime("%b %d"),
+                "fullLabel": day_key.strftime("%b %d, %Y"),
+                "hour": hour,
+                "hourLabel": f"{hour:02d}:00-{hour:02d}:59",
+                "count": count,
+            }
+
+    heatmap_rows = []
+    for day in window:
+        hourly_counts = counts_by_day_hour.get(day, [0] * 24)
+        row_peak = max(hourly_counts) if hourly_counts else 0
+        row_peak_hour = hourly_counts.index(row_peak) if row_peak > 0 else None
+        heatmap_rows.append(
+            {
+                "date": day.isoformat(),
+                "label": day.strftime("%b %d"),
+                "fullLabel": day.strftime("%b %d, %Y"),
+                "hours": hourly_counts,
+                "total": totals_by_day.get(day, 0),
+                "peakHour": row_peak_hour,
+                "peakCount": row_peak,
+            }
+        )
+
+    return {
+        "rows": heatmap_rows,
+        "peakWindow": peak_window,
+        "maxCount": max_count,
+        "totalAlerts": sum(totals_by_day.values()),
+    }
 
 
 def _compute_totals(base_query, user_id: int, device=None, total_devices=0, active_devices=0):
@@ -214,6 +304,7 @@ def dashboard_overview():
         "totals": totals,
         "widgets": widgets,
         "trends": trends,
+        "attackTiming": _build_attack_timing_data(base_query, window_days),
         "available_devices": available_devices,
         "selected_device": selected_payload,
         "lastUpdated": datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),

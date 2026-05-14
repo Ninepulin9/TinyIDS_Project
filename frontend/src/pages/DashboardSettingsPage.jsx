@@ -5,21 +5,21 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
+import {
+  DASHBOARD_TIMEFRAME_PRESETS,
+  DASHBOARD_TIMEFRAME_PRESET_VALUES,
+  DEFAULT_DASHBOARD_TIMEFRAME_PRESET,
+  getDashboardTimeframeLabel,
+  getDashboardTimeframeMinutes,
+  resolveDashboardTimeframePreset,
+} from '../lib/dashboardTimeframePresets.js'
 import Card from '../components/ui/Card.jsx'
 import Button from '../components/ui/Button.jsx'
 import TimeframeSelector from '../components/settings/TimeframeSelector.jsx'
 import WidgetToggleGrid from '../components/settings/WidgetToggleGrid.jsx'
 
-const timeframeOptions = [
-  { value: 'seconds', label: 'Seconds' },
-  { value: 'minutes', label: 'Minutes' },
-  { value: 'hours', label: 'Hours' },
-  { value: 'days', label: 'Days' },
-  { value: 'months', label: 'Months' },
-]
-
 const defaultSettings = {
-  graph_timeframe: 'days',
+  timeframe_preset: DEFAULT_DASHBOARD_TIMEFRAME_PRESET,
   widgets: {
     total_detected_attacks: true,
     total_packets_analyzed: true,
@@ -31,7 +31,7 @@ const defaultSettings = {
 }
 
 const settingsSchema = z.object({
-  graph_timeframe: z.enum(['seconds', 'minutes', 'hours', 'days', 'months']),
+  timeframe_preset: z.enum(DASHBOARD_TIMEFRAME_PRESET_VALUES),
   widgets: z.object({
     total_detected_attacks: z.boolean(),
     total_packets_analyzed: z.boolean(),
@@ -43,7 +43,7 @@ const settingsSchema = z.object({
 })
 
 const cloneSettings = (settings) => ({
-  graph_timeframe: settings.graph_timeframe,
+  timeframe_preset: settings.timeframe_preset,
   widgets: { ...settings.widgets },
 })
 
@@ -52,12 +52,8 @@ const normalizeSettings = (data) => {
     return cloneSettings(defaultSettings)
   }
 
-  const validTimeframe = timeframeOptions.some((option) => option.value === data.graph_timeframe)
-    ? data.graph_timeframe
-    : defaultSettings.graph_timeframe
-
   return {
-    graph_timeframe: validTimeframe,
+    timeframe_preset: resolveDashboardTimeframePreset(data.timeframe_minutes),
     widgets: {
       ...defaultSettings.widgets,
       ...(data.widgets ?? {}),
@@ -84,7 +80,7 @@ const DashboardSettingsPage = () => {
     defaultValues: cloneSettings(defaultSettings),
   })
 
-  const timeframe = watch('graph_timeframe')
+  const timeframePreset = watch('timeframe_preset')
 
   const loadSettings = useCallback(async () => {
     setLoading(true)
@@ -116,7 +112,7 @@ const DashboardSettingsPage = () => {
   }, [loadSettings])
 
   const handleTimeframeChange = (nextValue) => {
-    setValue('graph_timeframe', nextValue, { shouldDirty: true })
+    setValue('timeframe_preset', nextValue, { shouldDirty: true })
   }
 
   const dispatchUpdateEvent = (payload) => {
@@ -126,7 +122,11 @@ const DashboardSettingsPage = () => {
   const onSubmit = handleSubmit(async (values) => {
     setSaving(true)
     try {
-      const { data } = await api.put('/api/dashboard-settings/me', values)
+      const payload = {
+        timeframe_minutes: getDashboardTimeframeMinutes(values.timeframe_preset),
+        widgets: values.widgets,
+      }
+      const { data } = await api.put('/api/dashboard-settings/me', payload)
       const normalized = normalizeSettings(data)
       setInitialSettings(cloneSettings(normalized))
       reset(normalized)
@@ -151,7 +151,11 @@ const DashboardSettingsPage = () => {
     const defaults = cloneSettings(defaultSettings)
     setResetting(true)
     try {
-      const { data } = await api.put('/api/dashboard-settings/me', defaults)
+      const payload = {
+        timeframe_minutes: getDashboardTimeframeMinutes(defaults.timeframe_preset),
+        widgets: defaults.widgets,
+      }
+      const { data } = await api.put('/api/dashboard-settings/me', payload)
       const normalized = normalizeSettings(data ?? defaults)
       setInitialSettings(cloneSettings(normalized))
       reset(normalized)
@@ -227,12 +231,18 @@ const DashboardSettingsPage = () => {
 
       <form className="space-y-6" onSubmit={onSubmit}>
         <Card className="border border-slate-200 bg-white shadow-sm !bg-white !text-slate-900 dark:!bg-white dark:!text-slate-900">
-          <h2 className="text-lg font-semibold text-slate-900">Graph Time Frame</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Select the aggregation window TinyIDS uses across charts and analytics.
-          </p>
+          <h2 className="text-lg font-semibold text-slate-900">Chart Window</h2>
           <div className="mt-4">
-            <TimeframeSelector value={timeframe} onChange={handleTimeframeChange} options={timeframeOptions} />
+            <TimeframeSelector
+              value={timeframePreset}
+              onChange={handleTimeframeChange}
+              options={DASHBOARD_TIMEFRAME_PRESETS}
+            />
+          </div>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-sm font-semibold text-slate-800">
+              Current setting: {getDashboardTimeframeLabel(timeframePreset)}
+            </p>
           </div>
         </Card>
 

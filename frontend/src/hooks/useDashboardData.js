@@ -39,6 +39,12 @@ const buildDefaultMetrics = () => ({
   totals: { ...defaultTotals },
   widgets: { ...defaultWidgets },
   trends: createEmptyTrends(),
+  attackTiming: {
+    rows: [],
+    peakWindow: null,
+    maxCount: 0,
+    totalAlerts: 0,
+  },
   lastUpdated: null,
   devicesOnline: 0,
   deviceCount: 0,
@@ -71,6 +77,14 @@ const normalizeDashboardPayload = (payload) => {
       totals: normalizedTotals,
       widgets: normalizedWidgets,
       trends: normalizedTrends,
+      attackTiming:
+        payload.attackTiming && typeof payload.attackTiming === 'object'
+          ? {
+              ...baseMetrics.attackTiming,
+              ...payload.attackTiming,
+              rows: Array.isArray(payload.attackTiming.rows) ? payload.attackTiming.rows : [],
+            }
+          : baseMetrics.attackTiming,
       lastUpdated: payload.lastUpdated ?? baseMetrics.lastUpdated,
       devicesOnline:
         typeof payload.devicesOnline === 'number' ? payload.devicesOnline : baseMetrics.devicesOnline,
@@ -216,6 +230,19 @@ const useDashboardData = () => {
     return Array.isArray(data) ? data : []
   }, [metrics.trends])
 
+  const attackTiming = useMemo(() => {
+    const data = metrics?.attackTiming
+    if (!data || typeof data !== 'object') {
+      return buildDefaultMetrics().attackTiming
+    }
+    return {
+      rows: Array.isArray(data.rows) ? data.rows : [],
+      peakWindow: data.peakWindow ?? null,
+      maxCount: Number(data.maxCount ?? 0) || 0,
+      totalAlerts: Number(data.totalAlerts ?? 0) || 0,
+    }
+  }, [metrics.attackTiming])
+
   return {
     metrics,
     devices,
@@ -227,6 +254,7 @@ const useDashboardData = () => {
     windowDays,
     setWindowDays,
     trendData,
+    attackTiming,
     refresh,
     lastManualRefresh,
   }

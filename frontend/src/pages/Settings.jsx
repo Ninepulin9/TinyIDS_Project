@@ -2,55 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import api from '../lib/api'
+import {
+  DASHBOARD_TIMEFRAME_PRESETS,
+  DEFAULT_DASHBOARD_TIMEFRAME_PRESET,
+  getDashboardTimeframeLabel,
+  getDashboardTimeframeMinutes,
+  resolveDashboardTimeframePreset,
+} from '../lib/dashboardTimeframePresets.js'
 import Button from '../components/ui/Button.jsx'
 import TimeframeSelector from '../components/settings/TimeframeSelector.jsx'
 import Switch from '../components/ui/Switch.jsx'
 
 const getErrorMessage = (error, fallbackMessage) =>
   error?.response?.data?.message ?? error?.message ?? fallbackMessage
-
-const timeframeToMinutes = {
-  seconds: 0,
-  minutes: 1,
-  hours: 60,
-  days: 1440,
-  months: 43200,
-}
-
-const timeframeOptions = [
-  { value: 'seconds', label: 'Seconds' },
-  { value: 'minutes', label: 'Minutes' },
-  { value: 'hours', label: 'Hours' },
-  { value: 'days', label: 'Days' },
-  { value: 'months', label: 'Months' },
-]
-
-const minutesToTimeframe = (value) => {
-  const minutes = Number(value)
-  if (Number.isNaN(minutes)) return 'days'
-  if (minutes >= 43200) return 'months'
-  if (minutes >= 1440) return 'days'
-  if (minutes >= 60) return 'hours'
-  if (minutes >= 1) return 'minutes'
-  return 'seconds'
-}
-
-const formatTimeframeSummary = (timeframe) => {
-  switch (timeframe) {
-    case 'seconds':
-      return 'Groups dashboard data at second-level detail for very short live views.'
-    case 'minutes':
-      return 'Groups dashboard data by minute for short-term monitoring.'
-    case 'hours':
-      return 'Groups dashboard data by hour for same-day operational monitoring.'
-    case 'days':
-      return 'Groups dashboard data by day for weekly and monthly trend review.'
-    case 'months':
-      return 'Groups dashboard data by month for long-term summaries.'
-    default:
-      return 'Groups dashboard data into a readable chart time unit.'
-  }
-}
 
 const Settings = () => {
   const [systemSettings, setSystemSettings] = useState({
@@ -59,7 +23,7 @@ const Settings = () => {
     auto_block_enabled: true,
   })
   const [dashboardSettings, setDashboardSettings] = useState({
-    graph_timeframe: 'days',
+    timeframe_preset: DEFAULT_DASHBOARD_TIMEFRAME_PRESET,
     widgets_visible: { traffic: true, alerts: true },
   })
   const [systemSaving, setSystemSaving] = useState(false)
@@ -85,13 +49,9 @@ const Settings = () => {
         }
         const dashboardData = dashboard?.data ?? {}
         const widgets = dashboardData.widgets ?? dashboardData.widgets_visible ?? {}
-        const timeframe =
-          dashboardData.graph_timeframe ??
-          minutesToTimeframe(dashboardData.timeframe_minutes) ??
-          'days'
         setDashboardSettings((prev) => ({
           ...prev,
-          graph_timeframe: timeframe,
+          timeframe_preset: resolveDashboardTimeframePreset(dashboardData.timeframe_minutes),
           widgets_visible: {
             traffic: widgets.data_pipeline_card ?? prev.widgets_visible.traffic,
             alerts: widgets.alerts_triggered ?? prev.widgets_visible.alerts,
@@ -138,10 +98,8 @@ const Settings = () => {
     if (dashboardSaving) return
     setDashboardSaving(true)
     try {
-      const graphTimeframe = dashboardSettings.graph_timeframe ?? 'days'
       const payload = {
-        timeframe_minutes: timeframeToMinutes[graphTimeframe] ?? timeframeToMinutes.days,
-        graph_timeframe: graphTimeframe,
+        timeframe_minutes: getDashboardTimeframeMinutes(dashboardSettings.timeframe_preset),
         widgets: {
           data_pipeline_card: Boolean(dashboardSettings.widgets_visible?.traffic),
           alerts_triggered: Boolean(dashboardSettings.widgets_visible?.alerts),
@@ -249,27 +207,19 @@ const Settings = () => {
         <h2 className="text-xl font-semibold text-slate-900">Dashboard Settings</h2>
         <form onSubmit={handleDashboardSave} className="mt-6 space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-            <div className="flex flex-col gap-2">
-              <span className="text-sm font-semibold text-slate-800">Chart Grouping</span>
-              <span className="text-sm text-slate-500">
-                Choose an easier time unit for charts instead of typing raw minutes.
-              </span>
-            </div>
+            <span className="text-sm font-semibold text-slate-800">Chart Window</span>
             <div className="mt-4">
               <TimeframeSelector
-                value={dashboardSettings.graph_timeframe}
+                value={dashboardSettings.timeframe_preset}
                 onChange={(nextValue) =>
-                  setDashboardSettings((prev) => ({ ...prev, graph_timeframe: nextValue }))
+                  setDashboardSettings((prev) => ({ ...prev, timeframe_preset: nextValue }))
                 }
-                options={timeframeOptions}
+                options={DASHBOARD_TIMEFRAME_PRESETS}
               />
             </div>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
               <p className="text-sm font-semibold text-slate-800">
-                Current setting: {timeframeOptions.find((option) => option.value === dashboardSettings.graph_timeframe)?.label ?? 'Days'}
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                {formatTimeframeSummary(dashboardSettings.graph_timeframe)}
+                Current setting: {getDashboardTimeframeLabel(dashboardSettings.timeframe_preset)}
               </p>
             </div>
           </div>

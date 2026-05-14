@@ -56,6 +56,26 @@ const formatMetricValue = (value, isPercentage) => {
   return formatNumber(value)
 }
 
+const formatHourRange = (hour) => `${String(hour).padStart(2, '0')}:00-${String(hour).padStart(2, '0')}:59`
+
+const getHeatmapCellStyle = (count, maxCount) => {
+  if (!count || maxCount <= 0) {
+    return {
+      backgroundColor: '#f8fafc',
+      borderColor: '#e2e8f0',
+      color: '#94a3b8',
+    }
+  }
+
+  const intensity = Math.min(1, count / maxCount)
+  const alpha = 0.18 + intensity * 0.72
+  return {
+    backgroundColor: `rgba(2, 132, 199, ${alpha.toFixed(2)})`,
+    borderColor: intensity > 0.45 ? 'rgba(3, 105, 161, 0.75)' : '#7dd3fc',
+    color: intensity > 0.55 ? '#ffffff' : '#082f49',
+  }
+}
+
 const defaultWidgetVisibility = {
   total_detected_attacks: true,
   total_packets_analyzed: true,
@@ -83,8 +103,10 @@ const Dashboard = () => {
     setSelectedDeviceId,
     selectedDevice,
     refresh,
+    attackTiming,
   } = useDashboardData()
   const [widgetVisibility, setWidgetVisibility] = useState(defaultWidgetVisibility)
+  const [selectedAttackWindow, setSelectedAttackWindow] = useState(null)
   const refreshTimeoutRef = useRef(null)
   const lastRealtimeRefreshRef = useRef(0)
 
@@ -176,6 +198,27 @@ const Dashboard = () => {
   const lastAlertLabel = lastAlertAt ? new Date(lastAlertAt).toLocaleString() : '--'
   const showTrendChart = widgetVisibility.detection_trend_pct !== false
   const showSensorCard = widgetVisibility.sensor_health_card !== false
+  const attackTimingRows = Array.isArray(attackTiming?.rows) ? attackTiming.rows : []
+  const peakWindow = attackTiming?.peakWindow ?? null
+  const attackTimingMax = Number(attackTiming?.maxCount ?? 0) || 0
+
+  useEffect(() => {
+    if (!peakWindow) {
+      setSelectedAttackWindow(null)
+      return
+    }
+    setSelectedAttackWindow((current) => {
+      if (
+        current &&
+        current.date === peakWindow.date &&
+        current.hour === peakWindow.hour &&
+        current.count === peakWindow.count
+      ) {
+        return current
+      }
+      return peakWindow
+    })
+  }, [peakWindow])
 
   const handleDownloadReport = () => {
     const pdf = new jsPDF()
@@ -403,6 +446,130 @@ const Dashboard = () => {
             )}
           </section>
         )}
+
+        <section className="mt-8 rounded-2xl bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Attack Timing Heatmap</p>
+                  <p className="text-lg font-semibold text-slate-900">
+                    See which day and hour received unusual attack spikes
+                  </p>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-slate-500">
+                Each cell shows how many alerts arrived in that hour. Scan across the same day to spot bursts such as a spike around 20:00.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 lg:items-end">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">{formatNumber(attackTiming?.totalAlerts ?? 0)}</span> alerts mapped across the last {windowDays} days
+              </div>
+              {peakWindow && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  <span className="font-semibold">Peak window:</span>{' '}
+                  {peakWindow.fullLabel} at {peakWindow.hourLabel} with {formatNumber(peakWindow.count)} alerts
+                </div>
+              )}
+            </div>
+          </div>
+
+          {selectedAttackWindow && (
+            <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+              <span className="font-semibold">Focused window:</span>{' '}
+              {selectedAttackWindow.fullLabel} at {selectedAttackWindow.hourLabel} with{' '}
+              {formatNumber(selectedAttackWindow.count)} alerts
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            <span className="font-semibold uppercase tracking-wide text-slate-400">Legend</span>
+            <div className="flex items-center gap-2">
+              <span className="h-3.5 w-6 rounded border border-slate-200 bg-slate-50" />
+              Low
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3.5 w-6 rounded border border-sky-300 bg-sky-300/60" />
+              Medium
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-3.5 w-6 rounded border border-sky-700 bg-sky-700" />
+              High
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="min-w-[980px] border-separate border-spacing-1">
+              <thead>
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Day
+                  </th>
+                  {Array.from({ length: 24 }, (_, hour) => (
+                    <th
+                      key={`hour-${hour}`}
+                      className="px-1 py-2 text-center text-[11px] font-semibold text-slate-400"
+                    >
+                      {String(hour).padStart(2, '0')}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {attackTimingRows.map((row) => (
+                  <tr key={row.date}>
+                    <td className="whitespace-nowrap px-3 py-2 text-sm font-semibold text-slate-700">
+                      <div className="flex flex-col">
+                        <span>{row.label}</span>
+                        <span className="text-xs font-medium text-slate-400">
+                          Peak {row.peakHour == null ? '--' : formatHourRange(row.peakHour)}
+                        </span>
+                      </div>
+                    </td>
+                    {(Array.isArray(row.hours) ? row.hours : []).map((count, hour) => {
+                      const style = getHeatmapCellStyle(count, attackTimingMax)
+                      const isSelected =
+                        selectedAttackWindow?.date === row.date && selectedAttackWindow?.hour === hour
+                      return (
+                        <td key={`${row.date}-${hour}`} className="p-0">
+                          <button
+                            type="button"
+                            title={`${row.fullLabel} • ${formatHourRange(hour)} • ${count} alerts`}
+                            onClick={() =>
+                              setSelectedAttackWindow({
+                                date: row.date,
+                                fullLabel: row.fullLabel,
+                                hour,
+                                hourLabel: formatHourRange(hour),
+                                count,
+                              })
+                            }
+                            className={`flex h-9 w-9 items-center justify-center rounded-lg border text-[11px] font-semibold transition hover:scale-[1.04] ${
+                              isSelected ? 'ring-2 ring-sky-500 ring-offset-1' : ''
+                            }`}
+                            style={style}
+                          >
+                            {count > 0 ? count : ''}
+                          </button>
+                        </td>
+                      )
+                    })}
+                    <td className="px-3 py-2 text-right text-sm font-semibold text-slate-700">
+                      {formatNumber(row.total ?? 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         {loading && (
           <p className="mt-6 text-center text-sm text-slate-500">Loading dashboard metrics and charts...</p>
