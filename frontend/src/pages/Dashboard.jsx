@@ -455,15 +455,12 @@ const Dashboard = () => {
                   <AlertTriangle className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Attack Timing Heatmap</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Attack Activity Heatmap</p>
                   <p className="text-lg font-semibold text-slate-900">
-                    See which day and hour received unusual attack spikes
+                    View attack spikes by day and hour
                   </p>
                 </div>
               </div>
-              <p className="mt-3 text-sm text-slate-500">
-                Each cell shows how many alerts arrived in that hour. Scan across the same day to spot bursts such as a spike around 20:00.
-              </p>
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
