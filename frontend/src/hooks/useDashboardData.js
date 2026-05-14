@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import api from '../lib/api'
 
-export const DASHBOARD_TIMEFRAMES = [7, 30]
+export const TREND_TIMEFRAMES = [7, 30]
+export const ATTACK_TIMING_TIMEFRAMES = [1, 3, 5, 7]
 const AUTO_REFRESH_INTERVAL_MS = 4 * 1000
 
 const createEmptyTrends = () => ({
@@ -120,7 +121,8 @@ const useDashboardData = () => {
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [windowDays, setWindowDays] = useState(30)
+  const [trendWindowDays, setTrendWindowDays] = useState(30)
+  const [attackWindowDays, setAttackWindowDays] = useState(7)
   const [lastManualRefresh, setLastManualRefresh] = useState(null)
 
   const isMountedRef = useRef(false)
@@ -137,7 +139,11 @@ const useDashboardData = () => {
   const fetchMetrics = useCallback(
     async ({ silent = false, deviceId } = {}) => {
       const targetDeviceKey = deviceId ?? selectedDeviceId
-      const params = { ...resolveDeviceQueryParams(targetDeviceKey), window_days: windowDays }
+      const params = {
+        ...resolveDeviceQueryParams(targetDeviceKey),
+        trend_window_days: trendWindowDays,
+        attack_window_days: attackWindowDays,
+      }
 
       const requestId = requestIdRef.current + 1
       requestIdRef.current = requestId
@@ -188,7 +194,7 @@ const useDashboardData = () => {
         }
       }
     },
-    [selectedDeviceId, updateSelectedDeviceId, windowDays],
+    [attackWindowDays, selectedDeviceId, trendWindowDays, updateSelectedDeviceId],
   )
 
   useEffect(() => {
@@ -251,8 +257,10 @@ const useDashboardData = () => {
     selectedDevice,
     loading,
     error,
-    windowDays,
-    setWindowDays,
+    trendWindowDays,
+    setTrendWindowDays,
+    attackWindowDays,
+    setAttackWindowDays,
     trendData,
     attackTiming,
     refresh,

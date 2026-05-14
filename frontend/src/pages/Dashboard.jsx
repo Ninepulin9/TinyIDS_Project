@@ -3,7 +3,11 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { Activity, AlertTriangle, BarChart3, Boxes, CircuitBoard, Shield } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { useDashboardData, DASHBOARD_TIMEFRAMES } from '../hooks/useDashboardData'
+import {
+  useDashboardData,
+  TREND_TIMEFRAMES,
+  ATTACK_TIMING_TIMEFRAMES,
+} from '../hooks/useDashboardData'
 import api from '../lib/api'
 import { getSocket } from '../lib/socket'
 
@@ -57,6 +61,7 @@ const formatMetricValue = (value, isPercentage) => {
 }
 
 const ALL_ATTACK_DATES = 'all'
+const formatWindowDaysLabel = (days) => `Last ${days} ${days === 1 ? 'Day' : 'Days'}`
 const formatHourRange = (hour) => `${String(hour).padStart(2, '0')}:00-${String(hour).padStart(2, '0')}:59`
 
 const buildAttackWindowFromRow = (row) => {
@@ -110,8 +115,10 @@ const Dashboard = () => {
     metrics,
     loading,
     error,
-    windowDays,
-    setWindowDays,
+    trendWindowDays,
+    setTrendWindowDays,
+    attackWindowDays,
+    setAttackWindowDays,
     trendData,
     devices,
     selectedDeviceId,
@@ -320,7 +327,7 @@ const Dashboard = () => {
 
     pdf.setFontSize(10)
     pdf.text(`Report Issued: ${generatedAt.toLocaleString()}`, 14, 32)
-    pdf.text(`Reporting Window: Last ${windowDays} days`, 14, 38)
+    pdf.text(`Reporting Window: ${formatWindowDaysLabel(trendWindowDays)}`, 14, 38)
     pdf.text(`Device Context: ${contextDeviceName}`, 14, 44)
     pdf.text(`MAC Address: ${contextMac}`, 14, 50)
     pdf.text(`Current Threat Level: ${metrics.totals?.threatLevel ?? 0}%`, 14, 56)
@@ -348,7 +355,7 @@ const Dashboard = () => {
     if (trendRows.length) {
       autoTable(pdf, {
         startY: (pdf.lastAutoTable?.finalY ?? 66) + 12,
-        head: [[`Trend (Last ${windowDays} days)`, 'Value']],
+        head: [[`Trend (${formatWindowDaysLabel(trendWindowDays)})`, 'Value']],
         body: trendRows,
         styles: { textColor: [20, 24, 33] },
         headStyles: { fillColor: [14, 165, 233], textColor: 255, fontStyle: 'bold' },
@@ -455,22 +462,23 @@ const Dashboard = () => {
                   <div>
                     <p className="text-xs uppercase tracking-wide text-slate-500">Detected Attacks</p>
                     <p className="text-lg font-semibold text-slate-900">
-                      Alerts observed in the last {windowDays} days
+                      Alerts observed in the {formatWindowDaysLabel(trendWindowDays).toLowerCase()}
                     </p>
                   </div>
-                  {DASHBOARD_TIMEFRAMES.length > 1 && (
+                  {TREND_TIMEFRAMES.length > 1 && (
                     <div className="flex flex-wrap gap-2">
-                      {DASHBOARD_TIMEFRAMES.map((frame) => (
+                      {TREND_TIMEFRAMES.map((frame) => (
                         <button
                           key={frame}
-                          onClick={() => setWindowDays(frame)}
+                          type="button"
+                          onClick={() => setTrendWindowDays(frame)}
                           className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
-                            windowDays === frame
+                            trendWindowDays === frame
                               ? 'border-sky-500 bg-sky-50 text-sky-600'
                               : 'border-slate-200 text-slate-500 hover:bg-slate-50'
                           }`}
                         >
-                          Last {frame} days
+                          {formatWindowDaysLabel(frame)}
                         </button>
                       ))}
                     </div>
@@ -543,6 +551,24 @@ const Dashboard = () => {
                   <p className="text-lg font-semibold text-slate-900">
                     View attack spikes by day and hour
                   </p>
+                  {ATTACK_TIMING_TIMEFRAMES.length > 1 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {ATTACK_TIMING_TIMEFRAMES.map((frame) => (
+                        <button
+                          key={`heatmap-window-${frame}`}
+                          type="button"
+                          onClick={() => setAttackWindowDays(frame)}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition ${
+                            attackWindowDays === frame
+                              ? 'border-sky-500 bg-sky-50 text-sky-600'
+                              : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                          }`}
+                        >
+                          {formatWindowDaysLabel(frame)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -567,7 +593,7 @@ const Dashboard = () => {
                 <span className="font-semibold text-slate-900">{formatNumber(visibleAttackTimingTotalAlerts)}</span>{' '}
                 alerts mapped{' '}
                 {selectedAttackDate === ALL_ATTACK_DATES
-                  ? `across the last ${windowDays} days`
+                  ? `across the ${formatWindowDaysLabel(attackWindowDays).toLowerCase()}`
                   : `on ${selectedAttackDateRow?.fullLabel ?? 'the selected day'}`}
               </div>
               {activePeakWindow && (
@@ -683,7 +709,7 @@ const Dashboard = () => {
               </div>
               <h3 className="mt-4 text-base font-semibold text-slate-800">No attack activity mapped yet</h3>
               <p className="mt-2 text-sm text-slate-500">
-                No attack alerts were grouped into the selected {windowDays}-day window yet.
+                No attack alerts were grouped into the selected {attackWindowDays}-day window yet.
               </p>
             </div>
           )}

@@ -278,7 +278,9 @@ def dashboard_overview():
     user_id = _resolve_user_id()
     device_id = request.args.get("device_id", type=int)
     mac_address = request.args.get("mac_address")
-    window_days = request.args.get("window_days", type=int) or 30
+    window_days = request.args.get("window_days", type=int)
+    trend_window_days = request.args.get("trend_window_days", type=int) or window_days or 30
+    attack_window_days = request.args.get("attack_window_days", type=int) or window_days or 7
 
     base_query = _filtered_logs(user_id=user_id, device_id=device_id, mac_address=mac_address)
 
@@ -321,7 +323,7 @@ def dashboard_overview():
         active_devices=active_devices,
     )
     trends = {
-        "days": _build_trend_data(base_query, window_days),
+        "days": _build_trend_data(base_query, trend_window_days),
         "minutes": [{"label": f"{idx * 5}m", "value": 0} for idx in range(12)],
         "hours": [{"label": f"{idx}h", "value": 0} for idx in range(12)],
         "seconds": [{"label": f"{idx * 5}s", "value": 0} for idx in range(12)],
@@ -338,7 +340,7 @@ def dashboard_overview():
         "totals": totals,
         "widgets": widgets,
         "trends": trends,
-        "attackTiming": _build_attack_timing_data(base_query, window_days),
+        "attackTiming": _build_attack_timing_data(base_query, attack_window_days),
         "available_devices": available_devices,
         "selected_device": selected_payload,
         "lastUpdated": datetime.utcnow().replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
