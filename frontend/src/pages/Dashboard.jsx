@@ -637,23 +637,26 @@ const Dashboard = () => {
                   ? `across the ${formatWindowDaysLabel(attackWindowDays).toLowerCase()}`
                   : `on ${selectedAttackDateRow?.fullLabel ?? 'the selected day'}`}
               </div>
-              {activePeakWindow && (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  <span className="font-semibold">Peak window:</span>{' '}
-                  {activePeakWindow.fullLabel} at {activePeakWindow.hourLabel} with{' '}
-                  {formatNumber(activePeakWindow.count)} alerts
+              {(activePeakWindow || (showAttackTimingGrid && selectedAttackWindow)) && (
+                <div className="flex w-full flex-col gap-3 lg:max-w-[56rem] lg:flex-row lg:justify-end">
+                  {activePeakWindow && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 lg:max-w-[27rem]">
+                      <span className="font-semibold">Peak window:</span>{' '}
+                      {activePeakWindow.fullLabel} at {activePeakWindow.hourLabel} with{' '}
+                      {formatNumber(activePeakWindow.count)} alerts
+                    </div>
+                  )}
+                  {showAttackTimingGrid && selectedAttackWindow && (
+                    <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 lg:max-w-[27rem]">
+                      <span className="font-semibold">Focused window:</span>{' '}
+                      {selectedAttackWindow.fullLabel} at {selectedAttackWindow.hourLabel} with{' '}
+                      {formatNumber(selectedAttackWindow.count)} alerts
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
-
-          {showAttackTimingGrid && selectedAttackWindow && (
-            <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-              <span className="font-semibold">Focused window:</span>{' '}
-              {selectedAttackWindow.fullLabel} at {selectedAttackWindow.hourLabel} with{' '}
-              {formatNumber(selectedAttackWindow.count)} alerts
-            </div>
-          )}
 
           {showAttackTimingGrid ? (
             <>
