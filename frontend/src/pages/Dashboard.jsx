@@ -78,6 +78,29 @@ const buildAttackWindowFromRow = (row) => {
   }
 }
 
+const buildPeakAttackWindowFromRows = (rows) => {
+  let peakWindow = null
+
+  rows.forEach((row) => {
+    const hourlyCounts = Array.isArray(row?.hours) ? row.hours : []
+    hourlyCounts.forEach((value, hour) => {
+      const count = Number(value ?? 0) || 0
+      if (count <= 0) return
+      if (peakWindow && peakWindow.count >= count) return
+
+      peakWindow = {
+        date: row.date,
+        fullLabel: row.fullLabel,
+        hour,
+        hourLabel: formatHourRange(hour),
+        count,
+      }
+    })
+  })
+
+  return peakWindow
+}
+
 const getHeatmapCellStyle = (count, maxCount) => {
   if (!count || maxCount <= 0) {
     return {
@@ -222,13 +245,31 @@ const Dashboard = () => {
   const showTrendChart = widgetVisibility.detection_trend_pct !== false
   const showSensorCard = widgetVisibility.sensor_health_card !== false
   const attackTimingRows = Array.isArray(attackTiming?.rows) ? attackTiming.rows : []
-  const attackTimingTotalAlerts = Number(attackTiming?.totalAlerts ?? 0) || 0
-  const peakWindow = attackTiming?.peakWindow ?? null
-  const attackTimingMax = Number(attackTiming?.maxCount ?? 0) || 0
-  const hasAttackTimingData = attackTimingRows.length > 0 && attackTimingTotalAlerts > 0
+  const attackTimingWindowRows = useMemo(() => {
+    const days = Number(attackWindowDays ?? 0) || 0
+    if (days <= 0) return attackTimingRows
+    return attackTimingRows.slice(-days)
+  }, [attackTimingRows, attackWindowDays])
+  const attackTimingTotalAlerts = useMemo(
+    () => attackTimingWindowRows.reduce((total, row) => total + (Number(row.total ?? 0) || 0), 0),
+    [attackTimingWindowRows],
+  )
+  const attackTimingMax = useMemo(
+    () =>
+      attackTimingWindowRows.reduce((maxCount, row) => {
+        const rowMax = Math.max(...(Array.isArray(row.hours) ? row.hours : [0]))
+        return Math.max(maxCount, rowMax)
+      }, 0),
+    [attackTimingWindowRows],
+  )
+  const peakWindow = useMemo(
+    () => buildPeakAttackWindowFromRows(attackTimingWindowRows),
+    [attackTimingWindowRows],
+  )
+  const hasAttackTimingData = attackTimingWindowRows.length > 0 && attackTimingTotalAlerts > 0
   const attackTimingDateOptions = useMemo(
     () =>
-      attackTimingRows
+      attackTimingWindowRows
         .slice()
         .reverse()
         .map((row) => ({
@@ -236,18 +277,18 @@ const Dashboard = () => {
           fullLabel: row.fullLabel,
           total: Number(row.total ?? 0) || 0,
         })),
-    [attackTimingRows],
+    [attackTimingWindowRows],
   )
   const selectedAttackDateRow = useMemo(
-    () => attackTimingRows.find((row) => row.date === selectedAttackDate) ?? null,
-    [attackTimingRows, selectedAttackDate],
+    () => attackTimingWindowRows.find((row) => row.date === selectedAttackDate) ?? null,
+    [attackTimingWindowRows, selectedAttackDate],
   )
   const visibleAttackTimingRows = useMemo(() => {
     if (selectedAttackDate === ALL_ATTACK_DATES) {
-      return attackTimingRows
+      return attackTimingWindowRows
     }
-    return attackTimingRows.filter((row) => row.date === selectedAttackDate)
-  }, [attackTimingRows, selectedAttackDate])
+    return attackTimingWindowRows.filter((row) => row.date === selectedAttackDate)
+  }, [attackTimingWindowRows, selectedAttackDate])
   const visibleAttackTimingTotalAlerts = useMemo(
     () =>
       visibleAttackTimingRows.reduce((total, row) => total + (Number(row.total ?? 0) || 0), 0),
@@ -273,7 +314,7 @@ const Dashboard = () => {
     selectedAttackDate === ALL_ATTACK_DATES ? hasAttackTimingData : visibleAttackTimingRows.length > 0
 
   useEffect(() => {
-    if (!attackTimingRows.length) {
+    if (!attackTimingWindowRows.length) {
       setSelectedAttackDate(ALL_ATTACK_DATES)
       return
     }
@@ -282,9 +323,9 @@ const Dashboard = () => {
       if (current === ALL_ATTACK_DATES) {
         return current
       }
-      return attackTimingRows.some((row) => row.date === current) ? current : ALL_ATTACK_DATES
+      return attackTimingWindowRows.some((row) => row.date === current) ? current : ALL_ATTACK_DATES
     })
-  }, [attackTimingRows])
+  }, [attackTimingWindowRows])
 
   useEffect(() => {
     if (!visibleAttackTimingRows.length) {
