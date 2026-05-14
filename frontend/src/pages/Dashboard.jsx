@@ -56,7 +56,22 @@ const formatMetricValue = (value, isPercentage) => {
   return formatNumber(value)
 }
 
+const ALL_ATTACK_DATES = 'all'
 const formatHourRange = (hour) => `${String(hour).padStart(2, '0')}:00-${String(hour).padStart(2, '0')}:59`
+
+const buildAttackWindowFromRow = (row) => {
+  if (!row || row.peakHour == null || Number(row.peakCount ?? 0) <= 0) {
+    return null
+  }
+
+  return {
+    date: row.date,
+    fullLabel: row.fullLabel,
+    hour: row.peakHour,
+    hourLabel: formatHourRange(row.peakHour),
+    count: row.peakCount,
+  }
+}
 
 const getHeatmapCellStyle = (count, maxCount) => {
   if (!count || maxCount <= 0) {
@@ -106,6 +121,7 @@ const Dashboard = () => {
     attackTiming,
   } = useDashboardData()
   const [widgetVisibility, setWidgetVisibility] = useState(defaultWidgetVisibility)
+  const [selectedAttackDate, setSelectedAttackDate] = useState(ALL_ATTACK_DATES)
   const [selectedAttackWindow, setSelectedAttackWindow] = useState(null)
   const refreshTimeoutRef = useRef(null)
   const lastRealtimeRefreshRef = useRef(0)
@@ -203,24 +219,90 @@ const Dashboard = () => {
   const peakWindow = attackTiming?.peakWindow ?? null
   const attackTimingMax = Number(attackTiming?.maxCount ?? 0) || 0
   const hasAttackTimingData = attackTimingRows.length > 0 && attackTimingTotalAlerts > 0
+  const attackTimingDateOptions = useMemo(
+    () =>
+      attackTimingRows
+        .slice()
+        .reverse()
+        .map((row) => ({
+          date: row.date,
+          fullLabel: row.fullLabel,
+          total: Number(row.total ?? 0) || 0,
+        })),
+    [attackTimingRows],
+  )
+  const selectedAttackDateRow = useMemo(
+    () => attackTimingRows.find((row) => row.date === selectedAttackDate) ?? null,
+    [attackTimingRows, selectedAttackDate],
+  )
+  const visibleAttackTimingRows = useMemo(() => {
+    if (selectedAttackDate === ALL_ATTACK_DATES) {
+      return attackTimingRows
+    }
+    return attackTimingRows.filter((row) => row.date === selectedAttackDate)
+  }, [attackTimingRows, selectedAttackDate])
+  const visibleAttackTimingTotalAlerts = useMemo(
+    () =>
+      visibleAttackTimingRows.reduce((total, row) => total + (Number(row.total ?? 0) || 0), 0),
+    [visibleAttackTimingRows],
+  )
+  const visibleAttackTimingMax = useMemo(() => {
+    if (selectedAttackDate === ALL_ATTACK_DATES) {
+      return attackTimingMax
+    }
+
+    return visibleAttackTimingRows.reduce((maxCount, row) => {
+      const rowMax = Math.max(...(Array.isArray(row.hours) ? row.hours : [0]))
+      return Math.max(maxCount, rowMax)
+    }, 0)
+  }, [attackTimingMax, selectedAttackDate, visibleAttackTimingRows])
+  const activePeakWindow = useMemo(() => {
+    if (selectedAttackDate === ALL_ATTACK_DATES) {
+      return peakWindow
+    }
+    return buildAttackWindowFromRow(selectedAttackDateRow)
+  }, [peakWindow, selectedAttackDate, selectedAttackDateRow])
+  const showAttackTimingGrid =
+    selectedAttackDate === ALL_ATTACK_DATES ? hasAttackTimingData : visibleAttackTimingRows.length > 0
 
   useEffect(() => {
-    if (!peakWindow) {
+    if (!attackTimingRows.length) {
+      setSelectedAttackDate(ALL_ATTACK_DATES)
+      return
+    }
+
+    setSelectedAttackDate((current) => {
+      if (current === ALL_ATTACK_DATES) {
+        return current
+      }
+      return attackTimingRows.some((row) => row.date === current) ? current : ALL_ATTACK_DATES
+    })
+  }, [attackTimingRows])
+
+  useEffect(() => {
+    if (!visibleAttackTimingRows.length) {
       setSelectedAttackWindow(null)
       return
     }
+
     setSelectedAttackWindow((current) => {
-      if (
-        current &&
-        current.date === peakWindow.date &&
-        current.hour === peakWindow.hour &&
-        current.count === peakWindow.count
-      ) {
-        return current
+      const matchingRow = visibleAttackTimingRows.find((row) => row.date === current?.date)
+      const hour = Number.isInteger(current?.hour) ? current.hour : null
+
+      if (matchingRow && hour != null) {
+        const nextCount = Number(matchingRow.hours?.[hour] ?? 0) || 0
+        return {
+          date: matchingRow.date,
+          fullLabel: matchingRow.fullLabel,
+          hour,
+          hourLabel: formatHourRange(hour),
+          count: nextCount,
+        }
       }
-      return peakWindow
+
+      return activePeakWindow
     })
-  }, [peakWindow])
+  }, [activePeakWindow, visibleAttackTimingRows])
 
   const handleDownloadReport = () => {
     const pdf = new jsPDF()
@@ -465,19 +547,40 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
+              <label className="flex flex-col gap-1 text-xs uppercase tracking-wide text-slate-500">
+                Day Filter
+                <select
+                  value={selectedAttackDate}
+                  onChange={(event) => setSelectedAttackDate(event.target.value)}
+                  disabled={!attackTimingRows.length}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  <option value={ALL_ATTACK_DATES}>All days</option>
+                  {attackTimingDateOptions.map((row) => (
+                    <option key={row.date} value={row.date}>
+                      {row.fullLabel} ({formatNumber(row.total)} alerts)
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">{formatNumber(attackTimingTotalAlerts)}</span> alerts mapped across the last {windowDays} days
+                <span className="font-semibold text-slate-900">{formatNumber(visibleAttackTimingTotalAlerts)}</span>{' '}
+                alerts mapped{' '}
+                {selectedAttackDate === ALL_ATTACK_DATES
+                  ? `across the last ${windowDays} days`
+                  : `on ${selectedAttackDateRow?.fullLabel ?? 'the selected day'}`}
               </div>
-              {peakWindow && (
+              {activePeakWindow && (
                 <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                   <span className="font-semibold">Peak window:</span>{' '}
-                  {peakWindow.fullLabel} at {peakWindow.hourLabel} with {formatNumber(peakWindow.count)} alerts
+                  {activePeakWindow.fullLabel} at {activePeakWindow.hourLabel} with{' '}
+                  {formatNumber(activePeakWindow.count)} alerts
                 </div>
               )}
             </div>
           </div>
 
-          {hasAttackTimingData && selectedAttackWindow && (
+          {showAttackTimingGrid && selectedAttackWindow && (
             <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
               <span className="font-semibold">Focused window:</span>{' '}
               {selectedAttackWindow.fullLabel} at {selectedAttackWindow.hourLabel} with{' '}
@@ -485,7 +588,7 @@ const Dashboard = () => {
             </div>
           )}
 
-          {hasAttackTimingData ? (
+          {showAttackTimingGrid ? (
             <>
               <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                 <span className="font-semibold uppercase tracking-wide text-slate-400">Legend</span>
@@ -525,7 +628,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {attackTimingRows.map((row) => (
+                {visibleAttackTimingRows.map((row) => (
                   <tr key={row.date}>
                     <td className="whitespace-nowrap rounded-l-xl bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm">
                       <div className="flex flex-col">
@@ -536,7 +639,7 @@ const Dashboard = () => {
                       </div>
                     </td>
                     {(Array.isArray(row.hours) ? row.hours : []).map((count, hour) => {
-                      const style = getHeatmapCellStyle(count, attackTimingMax)
+                      const style = getHeatmapCellStyle(count, visibleAttackTimingMax)
                       const isSelected =
                         selectedAttackWindow?.date === row.date && selectedAttackWindow?.hour === hour
                       return (
@@ -594,4 +697,3 @@ const Dashboard = () => {
 }
 
 export default Dashboard
-
