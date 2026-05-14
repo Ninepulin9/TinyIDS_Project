@@ -7,8 +7,8 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from sqlalchemy import delete
 from sqlalchemy.orm import joinedload
 
-from extensions import db
-from models import Device, DeviceNetworkProfile, DeviceToken, Log
+from extensions import db, socketio
+from models import Blacklist, Device, DeviceNetworkProfile, DeviceRule, DeviceToken, Log
 from services.mqtt_service import mqtt_service
 
 
@@ -169,13 +169,40 @@ def update_device(device_id: int):
 @jwt_required()
 def delete_device(device_id: int):
     device = _get_device_or_404(device_id)
+    removed_blacklist_entries = (
+        Blacklist.query.filter(
+            Blacklist.user_id == device.user_id,
+            Blacklist.device_id == device.id,
+        )
+        .all()
+    )
     # Use core deletes to avoid ORM nulling device_id on logs.
     db.session.execute(delete(Log).where(Log.device_id == device.id))
+    db.session.execute(delete(Blacklist).where(Blacklist.device_id == device.id))
+    db.session.execute(delete(DeviceRule).where(DeviceRule.device_id == device.id))
     db.session.execute(delete(DeviceToken).where(DeviceToken.device_id == device.id))
     db.session.execute(delete(DeviceNetworkProfile).where(DeviceNetworkProfile.device_id == device.id))
     db.session.execute(delete(Device).where(Device.id == device.id))
     db.session.commit()
-    return jsonify({"status": "deleted", "id": device_id})
+
+    for entry in removed_blacklist_entries:
+        socketio.emit(
+            "blacklist:updated",
+            {
+                "action": "unblocked",
+                "device_id": entry.device_id,
+                "ip_address": entry.ip_address,
+                "reason": entry.reason,
+            },
+        )
+
+    return jsonify(
+        {
+            "status": "deleted",
+            "id": device_id,
+            "deleted_blacklist_entries": len(removed_blacklist_entries),
+        }
+    )
 
 
 @devices_bp.route("/<int:device_id>/wifi", methods=["PATCH"])
