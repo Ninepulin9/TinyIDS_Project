@@ -21,8 +21,14 @@ def register():
     if not all([username, email, password]):
         return jsonify({"message": "username, email, and password are required"}), HTTPStatus.BAD_REQUEST
 
-    if User.query.filter((User.username == username) | (User.email == email)).first():
-        return jsonify({"message": "User already exists"}), HTTPStatus.CONFLICT
+    existing_by_email = User.query.filter(User.email == email).first()
+    existing_by_username = User.query.filter(User.username == username).first()
+    if existing_by_email and existing_by_username:
+        return jsonify({"message": "Username and email already exist"}), HTTPStatus.CONFLICT
+    if existing_by_email:
+        return jsonify({"message": "Email already exists"}), HTTPStatus.CONFLICT
+    if existing_by_username:
+        return jsonify({"message": "Username already exists"}), HTTPStatus.CONFLICT
 
     user = User(username=username, email=email)
     user.set_password(password)

@@ -7,11 +7,11 @@ Flow:
 3) Send plaintext "Confirm-<nonce>-<token>" back on the same topic.
 4) Optional: wait for a plaintext "Confirm" from the device to verify.
 
-Environment variables (defaults are aimed at this TinyIDS stack):
-  MQTT_HOST           mosquitto
+Environment variables:
+  MQTT_HOST           localhost
   MQTT_PORT           8883
   MQTT_USE_TLS        true
-  MQTT_CA_CERTS       ./mosquitto/certs/ca.crt
+  MQTT_CA_CERTS       (optional; uses system CA store when omitted)
   MQTT_USERNAME       (optional)
   MQTT_PASSWORD       (optional)
   DISCOVERY_TOPIC     esp/Entrance
@@ -67,7 +67,7 @@ class DiscoveryClient:
         if username:
             self.client.username_pw_set(username, password)
         if use_tls:
-            self.client.tls_set(ca_certs=ca_certs)
+            self.client.tls_set(ca_certs=ca_certs or None)
 
         self.nonce: Optional[str] = None
         self.used_nonces: set[str] = set()
@@ -165,10 +165,10 @@ def parse_args():
         default=os.getenv("DISCOVERY_REPLY_TOPIC", "esp/esp/Entrance"),
         help="MQTT topic to receive ESP discovery responses",
     )
-    parser.add_argument("--host", default=os.getenv("MQTT_HOST", "mosquitto"))
+    parser.add_argument("--host", default=os.getenv("MQTT_HOST", "localhost"))
     parser.add_argument("--port", type=int, default=int(os.getenv("MQTT_PORT", 8883)))
     parser.add_argument("--no-tls", action="store_true", help="Disable TLS")
-    parser.add_argument("--ca-certs", default=os.getenv("MQTT_CA_CERTS", "./mosquitto/certs/ca.crt"))
+    parser.add_argument("--ca-certs", default=os.getenv("MQTT_CA_CERTS"))
     parser.add_argument("--username", default=os.getenv("MQTT_USERNAME"))
     parser.add_argument("--password", default=os.getenv("MQTT_PASSWORD"))
     parser.add_argument("--nonce-length", type=int, default=int(os.getenv("NONCE_LENGTH", 8)))

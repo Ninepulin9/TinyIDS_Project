@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "match-sorter": "^6.3.4"
+  },
+  "devDependencies": {
+    "baseline-browser-mapping": "^2.10.31"
   }
 }

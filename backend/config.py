@@ -15,7 +15,7 @@ class Settings:
     ALLOWED_ORIGIN = os.getenv("ALLOWED_ORIGIN", "http://localhost:5173")
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", ALLOWED_ORIGIN)
     SOCKETIO_MESSAGE_QUEUE = os.getenv("SOCKETIO_MESSAGE_QUEUE")
-    MQTT_BROKER_URL = os.getenv("MQTT_BROKER_URL", "mosquitto")
+    MQTT_BROKER_URL = os.getenv("MQTT_BROKER_URL", "")
     MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", 1883))
     MQTT_TOPICS = os.getenv("MQTT_TOPICS")
     MQTT_TOPIC = os.getenv("MQTT_TOPIC", "tinyids/logs")

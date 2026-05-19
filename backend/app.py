@@ -5,6 +5,7 @@ from typing import Iterable, List
 from flask import Flask, jsonify
 from flask_cors import CORS
 from sqlalchemy import inspect, text
+from sqlalchemy.schema import CreateColumn
 from werkzeug.exceptions import HTTPException
 
 from config import settings
@@ -25,16 +26,55 @@ from routes.device_rules import device_rules_bp
 logging.basicConfig(level=logging.INFO)
 
 
+def _scalar_default_sql(column) -> str | None:
+    default = getattr(column, "default", None)
+    if default is None or not getattr(default, "is_scalar", False):
+        return None
+
+    value = default.arg
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return "'" + value.replace("'", "''") + "'"
+    return None
+
+
+def _add_column_statement(column) -> str:
+    definition = str(CreateColumn(column).compile(dialect=db.engine.dialect))
+    default_sql = _scalar_default_sql(column)
+    if default_sql is not None and " DEFAULT " not in definition.upper():
+        definition = f"{definition} DEFAULT {default_sql}"
+    return f"ALTER TABLE {column.table.name} ADD COLUMN {definition}"
+
+
 def ensure_runtime_schema(app: Flask) -> None:
     # `create_all()` will not add new columns to an existing table, so patch legacy DBs here.
     inspector = inspect(db.engine)
-    columns = {column["name"] for column in inspector.get_columns("device_tokens")}
-    if "session_code" in columns:
-        return
+    tables = []
+    seen_table_names = set()
+    for mapper in db.Model.registry.mappers:
+        table = mapper.local_table
+        if table is None or table.name in seen_table_names:
+            continue
+        tables.append(table)
+        seen_table_names.add(table.name)
 
     with db.engine.begin() as connection:
-        connection.execute(text("ALTER TABLE device_tokens ADD COLUMN session_code VARCHAR(32)"))
-    app.logger.info("Added device_tokens.session_code column")
+        for table in tables:
+            if not inspector.has_table(table.name):
+                continue
+
+            existing_columns = {column["name"] for column in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing_columns:
+                    continue
+                connection.execute(text(_add_column_statement(column)))
+                existing_columns.add(column.name)
+                app.logger.info("Added %s.%s column", table.name, column.name)
 
 
 def create_app() -> Flask:
@@ -122,7 +162,7 @@ def register_jwt_callbacks(app: Flask) -> None:
             user_id = int(identity)
         except (TypeError, ValueError):
             return None
-        return User.query.get(user_id)
+        return db.session.get(User, user_id)
 
     @jwt.expired_token_loader
     def expired_callback(jwt_header, jwt_payload):  # noqa: D401
