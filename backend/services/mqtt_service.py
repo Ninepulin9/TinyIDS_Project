@@ -11,7 +11,16 @@ import paho.mqtt.client as mqtt
 from sqlalchemy import delete, func
 
 from extensions import db, socketio
-from models import Blacklist, Device, DeviceNetworkProfile, DeviceToken, Log, SystemSettings, User
+from models import (
+    Blacklist,
+    Device,
+    DeviceNetworkProfile,
+    DeviceRule,
+    DeviceToken,
+    Log,
+    SystemSettings,
+    User,
+)
 
 
 class MQTTService:
@@ -648,6 +657,12 @@ class MQTTService:
                         if stale_ids:
                             for device_id in stale_ids:
                                 db.session.execute(delete(Log).where(Log.device_id == device_id))
+                                db.session.execute(
+                                    delete(Blacklist).where(Blacklist.device_id == device_id)
+                                )
+                                db.session.execute(
+                                    delete(DeviceRule).where(DeviceRule.device_id == device_id)
+                                )
                                 db.session.execute(
                                     delete(DeviceToken).where(DeviceToken.device_id == device_id)
                                 )
